@@ -65,20 +65,20 @@ public class InventoryDbContextTests : IDisposable
         await using var context = CreateContext();
         await context.Database.EnsureCreatedAsync();
 
-        Assert.Equal(14, await context.Permissions.CountAsync());
+        Assert.Equal(19, await context.Permissions.CountAsync());
         Assert.Equal(2, await context.Roles.CountAsync());
 
         var administrator = await context.Roles
             .Include(r => r.Permissions)
             .SingleAsync(r => r.Name == "Administrator");
 
-        Assert.Equal(14, administrator.Permissions.Count);
+        Assert.Equal(19, administrator.Permissions.Count);
 
         var standardUser = await context.Roles
             .Include(r => r.Permissions)
             .SingleAsync(r => r.Name == "Standard User");
 
-        Assert.Equal(4, standardUser.Permissions.Count);
+        Assert.Equal(7, standardUser.Permissions.Count);
     }
 
     [Fact]

@@ -23,20 +23,25 @@ public class PermissionConfiguration : IEntityTypeConfiguration<Permission>
             .HasDatabaseName("IX_Permissions_Name");
 
         builder.HasData(
-            Seed(SeedIds.Permissions.ProductsView, "Products.View", "View products and categories."),
-            Seed(SeedIds.Permissions.ProductsManage, "Products.Manage", "Create, edit, and deactivate products."),
-            Seed(SeedIds.Permissions.CategoriesManage, "Categories.Manage", "Create and edit product categories."),
-            Seed(SeedIds.Permissions.SuppliersManage, "Suppliers.Manage", "Create and edit suppliers."),
-            Seed(SeedIds.Permissions.CustomersManage, "Customers.Manage", "Create and edit customers."),
+            Seed(SeedIds.Permissions.DashboardView, "Dashboard.View", "View the dashboard."),
+            Seed(SeedIds.Permissions.ProductsView, "Products.View", "View products."),
+            Seed(SeedIds.Permissions.ProductsCreate, "Products.Create", "Create new products."),
+            Seed(SeedIds.Permissions.ProductsEdit, "Products.Edit", "Edit existing products."),
+            Seed(SeedIds.Permissions.ProductsDelete, "Products.Delete", "Delete (deactivate) products."),
             Seed(SeedIds.Permissions.PurchasesView, "Purchases.View", "View purchase orders."),
-            Seed(SeedIds.Permissions.PurchasesManage, "Purchases.Manage", "Create and confirm purchase orders."),
+            Seed(SeedIds.Permissions.PurchasesCreate, "Purchases.Create", "Create purchase orders."),
+            Seed(SeedIds.Permissions.PurchasesEdit, "Purchases.Edit", "Edit purchase orders."),
             Seed(SeedIds.Permissions.SalesView, "Sales.View", "View sales orders/invoices."),
-            Seed(SeedIds.Permissions.SalesManage, "Sales.Manage", "Create and invoice sales."),
-            Seed(SeedIds.Permissions.InventoryManage, "Inventory.Manage", "Perform manual stock adjustments."),
+            Seed(SeedIds.Permissions.SalesCreate, "Sales.Create", "Create sales orders/invoices."),
+            Seed(SeedIds.Permissions.SalesEdit, "Sales.Edit", "Edit sales orders/invoices."),
+            Seed(SeedIds.Permissions.InventoryView, "Inventory.View", "View current stock levels."),
+            Seed(SeedIds.Permissions.InventoryAdjust, "Inventory.Adjust", "Perform manual stock adjustments."),
             Seed(SeedIds.Permissions.ReportsView, "Reports.View", "View dashboards and reports."),
-            Seed(SeedIds.Permissions.UsersManage, "Users.Manage", "Manage user accounts and roles."),
-            Seed(SeedIds.Permissions.SettingsManage, "Settings.Manage", "Change application-wide settings."),
-            Seed(SeedIds.Permissions.BackupManage, "Backup.Manage", "Configure and run backups/restores."));
+            Seed(SeedIds.Permissions.UsersView, "Users.View", "View user accounts."),
+            Seed(SeedIds.Permissions.UsersManage, "Users.Manage", "Create/edit user accounts and roles."),
+            Seed(SeedIds.Permissions.BackupCreate, "Backup.Create", "Create backups."),
+            Seed(SeedIds.Permissions.BackupRestore, "Backup.Restore", "Restore from a backup."),
+            Seed(SeedIds.Permissions.SettingsManage, "Settings.Manage", "Change application-wide settings."));
     }
 
     private static Permission Seed(Guid id, string name, string description) => new()

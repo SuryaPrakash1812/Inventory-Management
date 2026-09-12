@@ -1,6 +1,5 @@
 using System.Windows;
 using InventoryManagement.App.ViewModels;
-using InventoryManagement.App.Views.Pages;
 using Wpf.Ui.Abstractions;
 using Wpf.Ui.Appearance;
 using Wpf.Ui.Controls;
@@ -39,6 +38,14 @@ public partial class MainWindow : FluentWindow
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         Loaded -= OnLoaded;
-        RootNavigation.Navigate(typeof(DashboardPage));
+
+        var firstItem = ViewModel.MenuItems.Concat(ViewModel.FooterMenuItems)
+            .OfType<NavigationViewItem>()
+            .FirstOrDefault(item => item.TargetPageType is not null);
+
+        if (firstItem?.TargetPageType is { } targetPageType)
+        {
+            RootNavigation.Navigate(targetPageType);
+        }
     }
 }

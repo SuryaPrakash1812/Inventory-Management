@@ -1,9 +1,13 @@
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
+using CommunityToolkit.Mvvm.Messaging;
+using InventoryManagement.App.Messages;
 using InventoryManagement.App.Services;
 using InventoryManagement.App.Views;
+using InventoryManagement.App.Views.Auth;
 using InventoryManagement.Application;
+using InventoryManagement.Application.Auth;
 using InventoryManagement.Application.Common.Interfaces;
 using InventoryManagement.Application.Settings;
 using InventoryManagement.Infrastructure;
@@ -18,14 +22,26 @@ namespace InventoryManagement.App;
 
 /// <summary>
 /// Composition root. Nothing here belongs to any feature - it only wires
-/// hosting, configuration, logging, DI and global error handling together,
-/// then hands control to the first window. Feature registration happens
-/// inside each layer's own AddXxx() extension method (AddApplication,
+/// hosting, configuration, logging, DI, global error handling, and the
+/// login/logout window flow together. Feature registration happens inside
+/// each layer's own AddXxx() extension method (AddApplication,
 /// AddInfrastructure, AddPresentation).
+///
+/// WINDOW LIFECYCLE: ShutdownMode is OnExplicitShutdown (set below) rather
+/// than the default OnMainWindowClose, because "the main window closes" is
+/// ambiguous here - it happens both when the user actually wants to exit
+/// AND when we swap from the login window to the shell (or back, on
+/// logout). <see cref="TransitionTo"/> is the single place that tracks
+/// which window is "really" current; a window's Closed event only means
+/// "the user clicked X" when it fires for whichever window that field still
+/// points to at the time - so genuine user-initiated closes fall through to
+/// Shutdown(), while our own programmatic transitions don't.
 /// </summary>
 public partial class App : WpfApplication
 {
     private IHost? _host;
+    private IServiceScope? _appScope;
+    private Window? _currentWindow;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -34,6 +50,8 @@ public partial class App : WpfApplication
         Log.Logger = SerilogConfigurator.CreateLogger();
 
         RegisterGlobalExceptionHandlers();
+
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
         try
         {
@@ -56,25 +74,24 @@ public partial class App : WpfApplication
 
             await _host.StartAsync();
 
-            // IDatabaseInitializer depends on the (Scoped) InventoryDbContext,
-            // so it must be resolved through an explicit scope rather than
-            // straight from the root provider - the root provider only ever
-            // holds singletons.
-            using (var scope = _host.Services.CreateScope())
-            {
-                var databaseInitializer = scope.ServiceProvider.GetRequiredService<IDatabaseInitializer>();
-                await databaseInitializer.InitializeAsync();
-            }
+            // One scope for the whole app run (see DependencyInjection.cs remarks
+            // on why: InventoryDbContext is Scoped, but a desktop app has no
+            // natural per-request boundary the way a web app does).
+            _appScope = _host.Services.CreateScope();
+
+            var databaseInitializer = _appScope.ServiceProvider.GetRequiredService<IDatabaseInitializer>();
+            await databaseInitializer.InitializeAsync();
 
             // Load persisted preferences and apply the theme before the first
             // window is shown, so there is no visible "flash" of the default
             // theme followed by a switch to the user's actual preference.
-            var settingsService = _host.Services.GetRequiredService<ISettingsService>();
+            var settingsService = _appScope.ServiceProvider.GetRequiredService<ISettingsService>();
             await settingsService.LoadAsync();
             ThemeApplier.Apply(settingsService.Current.Theme);
 
-            var mainWindow = _host.Services.GetRequiredService<MainWindow>();
-            mainWindow.Show();
+            WeakReferenceMessenger.Default.Register<LogoutRequestedMessage>(this, OnLogoutRequested);
+
+            TransitionTo(BuildLoginWindow());
 
             base.OnStartup(e);
         }
@@ -97,6 +114,8 @@ public partial class App : WpfApplication
     {
         Log.Information("Application shutting down");
 
+        _appScope?.Dispose();
+
         if (_host is not null)
         {
             await _host.StopAsync();
@@ -106,6 +125,53 @@ public partial class App : WpfApplication
         await Log.CloseAndFlushAsync();
 
         base.OnExit(e);
+    }
+
+    private LoginWindow BuildLoginWindow()
+    {
+        var loginWindow = _appScope!.ServiceProvider.GetRequiredService<LoginWindow>();
+
+        loginWindow.ViewModel.SignedIn += (_, _) => TransitionTo(BuildMainWindow());
+
+        return loginWindow;
+    }
+
+    private MainWindow BuildMainWindow() => _appScope!.ServiceProvider.GetRequiredService<MainWindow>();
+
+    private async void OnLogoutRequested(object recipient, LogoutRequestedMessage message)
+    {
+        var authenticationService = _appScope!.ServiceProvider.GetRequiredService<IAuthenticationService>();
+        await authenticationService.LogoutAsync();
+
+        TransitionTo(BuildLoginWindow());
+    }
+
+    /// <summary>
+    /// Shows <paramref name="newWindow"/> and closes whichever window was
+    /// current before it. Order matters: <see cref="_currentWindow"/> is
+    /// updated to point at the new window *before* the old one is closed, so
+    /// the old window's Closed handler (registered below) sees that it is no
+    /// longer "the current window" and correctly does nothing, instead of
+    /// mistaking this transition for the user wanting to exit.
+    /// </summary>
+    private void TransitionTo(Window newWindow)
+    {
+        var oldWindow = _currentWindow;
+        _currentWindow = newWindow;
+
+        newWindow.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_currentWindow, newWindow))
+            {
+                // Still "current" when it closed - this was a genuine
+                // user-initiated close (the title bar X button), not one of
+                // our own login/logout transitions. Time to exit for real.
+                Shutdown();
+            }
+        };
+
+        newWindow.Show();
+        oldWindow?.Close();
     }
 
     /// <summary>

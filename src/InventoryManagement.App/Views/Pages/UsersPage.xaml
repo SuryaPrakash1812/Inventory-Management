@@ -1,7 +1,183 @@
 <Page x:Class="InventoryManagement.App.Views.Pages.UsersPage"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      xmlns:views="clr-namespace:InventoryManagement.App.Views"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       Title="Users">
-    <views:PlaceholderView />
+    <TabControl Margin="16">
+        <TabItem Header="Users">
+            <Grid Margin="0,12,0,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+                    <ui:Button Content="New User" Command="{Binding StartCreateUserCommand}" Appearance="Primary" />
+                    <ui:TextBlock Text="{Binding ErrorMessage}"
+                                  Foreground="IndianRed"
+                                  VerticalAlignment="Center"
+                                  Margin="16,0,0,0" />
+                </StackPanel>
+
+                <Grid Grid.Row="1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="320" />
+                    </Grid.ColumnDefinitions>
+
+                    <DataGrid Grid.Column="0"
+                              ItemsSource="{Binding Users}"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              CanUserAddRows="False"
+                              Margin="0,0,12,0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Username" Binding="{Binding Username}" Width="140" />
+                            <DataGridTextColumn Header="Full Name" Binding="{Binding FullName}" Width="180" />
+                            <DataGridTextColumn Header="Role" Binding="{Binding RoleName}" Width="140" />
+                            <DataGridCheckBoxColumn Header="Active" Binding="{Binding IsActive}" Width="60" />
+                            <DataGridTemplateColumn Header="" Width="150">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <ui:Button Content="Edit"
+                                                       Margin="0,0,4,0"
+                                                       Command="{Binding DataContext.StartEditUserCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                       CommandParameter="{Binding}" />
+                                            <ui:Button Content="Deactivate"
+                                                       Command="{Binding DataContext.DeactivateUserCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                       CommandParameter="{Binding}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <ui:Card Grid.Column="1" Visibility="{Binding IsEditingUser, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel>
+                            <ui:TextBlock Text="User Details" FontTypography="BodyStrong" Margin="0,0,0,12" />
+
+                            <ui:TextBox Text="{Binding UserFormUsername, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="Username"
+                                        IsEnabled="{Binding IsUsernameEditable}"
+                                        Margin="0,0,0,8" />
+                            <ui:TextBox Text="{Binding UserFormFullName, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="Full name"
+                                        Margin="0,0,0,8" />
+                            <ui:TextBox Text="{Binding UserFormEmail, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="Email (optional)"
+                                        Margin="0,0,0,8" />
+                            <ComboBox ItemsSource="{Binding Roles}"
+                                      SelectedItem="{Binding UserFormRole}"
+                                      DisplayMemberPath="Name"
+                                      Margin="0,0,0,8" />
+                            <ui:PasswordBox Password="{Binding UserFormPassword, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                            PlaceholderText="Password (leave blank to keep current)"
+                                            Margin="0,0,0,8" />
+                            <CheckBox Content="Active" IsChecked="{Binding UserFormIsActive}" Margin="0,0,0,12" />
+
+                            <StackPanel Orientation="Horizontal">
+                                <ui:Button Content="Save"
+                                           Command="{Binding SaveUserCommand}"
+                                           Appearance="Primary"
+                                           Margin="0,0,8,0" />
+                                <ui:Button Content="Cancel" Command="{Binding CancelUserEditCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </ui:Card>
+                </Grid>
+            </Grid>
+        </TabItem>
+
+        <TabItem Header="Roles">
+            <Grid Margin="0,12,0,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+                    <ui:Button Content="New Role" Command="{Binding StartCreateRoleCommand}" Appearance="Primary" />
+                </StackPanel>
+
+                <Grid Grid.Row="1">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="300" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <ListBox Grid.Column="0" ItemsSource="{Binding Roles}" Margin="0,0,12,0">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0">
+                                        <ui:TextBlock Text="{Binding Name}" FontTypography="BodyStrong" />
+                                        <ui:TextBlock Text="{Binding UserCount, StringFormat='{}{0} user(s)'}"
+                                                      FontTypography="Caption"
+                                                      Opacity="0.6" />
+                                    </StackPanel>
+
+                                    <ui:Button Grid.Column="1"
+                                               Content="Edit"
+                                               Margin="0,0,4,0"
+                                               Command="{Binding DataContext.StartEditRoleCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                               CommandParameter="{Binding}" />
+                                    <ui:Button Grid.Column="2"
+                                               Content="Delete"
+                                               Command="{Binding DataContext.DeleteRoleCommand, RelativeSource={RelativeSource AncestorType=ListBox}}"
+                                               CommandParameter="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <ui:Card Grid.Column="1" Visibility="{Binding IsEditingRole, Converter={StaticResource BoolToVisibility}}">
+                        <StackPanel>
+                            <ui:TextBox Text="{Binding RoleFormName, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="Role name"
+                                        Margin="0,0,0,8" />
+                            <ui:TextBox Text="{Binding RoleFormDescription, UpdateSourceTrigger=PropertyChanged}"
+                                        PlaceholderText="Description (optional)"
+                                        Margin="0,0,0,12" />
+
+                            <ui:TextBlock Text="Permissions" FontTypography="BodyStrong" Margin="0,0,0,8" />
+
+                            <ItemsControl ItemsSource="{Binding PermissionOptions}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <CheckBox Content="{Binding Name}"
+                                                  IsChecked="{Binding IsSelected}"
+                                                  Width="220"
+                                                  Margin="0,4" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <ui:TextBlock Text="{Binding ErrorMessage}" Foreground="IndianRed" Margin="0,12,0,0" />
+
+                            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                <ui:Button Content="Save"
+                                           Command="{Binding SaveRoleCommand}"
+                                           Appearance="Primary"
+                                           Margin="0,0,8,0" />
+                                <ui:Button Content="Cancel" Command="{Binding CancelRoleEditCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </ui:Card>
+                </Grid>
+            </Grid>
+        </TabItem>
+    </TabControl>
 </Page>

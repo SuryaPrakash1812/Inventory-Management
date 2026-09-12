@@ -1,18 +1,18 @@
 using System.Windows.Controls;
 using InventoryManagement.App.ViewModels;
+using InventoryManagement.App.ViewModels.Users;
 
 namespace InventoryManagement.App.Views.Pages;
 
-/// <summary>
-/// Placeholder page for Users. User accounts, authentication and permissions arrive in Stage 9 (Users, Auth, Permissions).
-/// </summary>
 public partial class UsersPage : Page
 {
-    public UsersPage(ShellViewModel shell)
+    public UsersPage(UsersViewModel viewModel, ShellViewModel shell)
     {
         InitializeComponent();
 
-        DataContext = new PlaceholderViewModel("Users", "User accounts, authentication and permissions arrive in Stage 9 (Users, Auth, Permissions).");
+        DataContext = viewModel;
         shell.CurrentPageTitle = "Users";
+
+        Loaded += async (_, _) => await viewModel.InitializeAsync();
     }
 }

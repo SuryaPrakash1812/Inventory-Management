@@ -1,0 +1,102 @@
+<ui:FluentWindow x:Class="InventoryManagement.App.Views.Auth.LoginWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 xmlns:converters="clr-namespace:InventoryManagement.App.Converters"
+                 Title="Inventory Management"
+                 Height="600"
+                 Width="420"
+                 ResizeMode="NoResize"
+                 WindowStartupLocation="CenterScreen"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica"
+                 WindowCornerPreference="Round">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0"
+                     Title="Inventory Management"
+                     ShowMaximize="False"
+                     ShowMinimize="False" />
+
+        <StackPanel Grid.Row="1"
+                    VerticalAlignment="Center"
+                    HorizontalAlignment="Center"
+                    Width="300">
+
+            <ui:TextBlock Text="Inventory Management"
+                          FontTypography="TitleLarge"
+                          HorizontalAlignment="Center"
+                          Margin="0,0,0,4" />
+
+            <!-- First-run: create the administrator account -->
+            <StackPanel Visibility="{Binding IsFirstRun, Converter={StaticResource BoolToVisibility}}">
+                <ui:TextBlock Text="Create the administrator account to get started"
+                              FontTypography="Body"
+                              Opacity="0.65"
+                              HorizontalAlignment="Center"
+                              TextWrapping="Wrap"
+                              TextAlignment="Center"
+                              Margin="0,0,0,24" />
+
+                <ui:TextBox Text="{Binding FullName, UpdateSourceTrigger=PropertyChanged}"
+                            PlaceholderText="Full name"
+                            Margin="0,0,0,8" />
+
+                <ui:TextBox Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"
+                            PlaceholderText="Username"
+                            Margin="0,0,0,8" />
+
+                <ui:PasswordBox Password="{Binding Password, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                PlaceholderText="Password (at least 8 characters)"
+                                Margin="0,0,0,8" />
+
+                <ui:PasswordBox Password="{Binding ConfirmPassword, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                PlaceholderText="Confirm password"
+                                Margin="0,0,0,16" />
+
+                <ui:Button Content="Create Administrator Account"
+                           Command="{Binding CreateAdministratorCommand}"
+                           Appearance="Primary"
+                           HorizontalAlignment="Stretch"
+                           HorizontalContentAlignment="Center" />
+            </StackPanel>
+
+            <!-- Normal login -->
+            <StackPanel Visibility="{Binding IsFirstRun, Converter={StaticResource InverseBoolToVisibility}}">
+                <ui:TextBlock Text="Sign in to continue"
+                              FontTypography="Body"
+                              Opacity="0.65"
+                              HorizontalAlignment="Center"
+                              Margin="0,0,0,24" />
+
+                <ui:TextBox Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"
+                            PlaceholderText="Username"
+                            Margin="0,0,0,8" />
+
+                <ui:PasswordBox Password="{Binding Password, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                PlaceholderText="Password"
+                                Margin="0,0,0,16" />
+
+                <ui:Button Content="Sign In"
+                           Command="{Binding LoginCommand}"
+                           Appearance="Primary"
+                           HorizontalAlignment="Stretch"
+                           HorizontalContentAlignment="Center" />
+            </StackPanel>
+
+            <ui:TextBlock Text="{Binding ErrorMessage}"
+                          Foreground="IndianRed"
+                          FontTypography="Caption"
+                          TextWrapping="Wrap"
+                          TextAlignment="Center"
+                          HorizontalAlignment="Center"
+                          Margin="0,16,0,0"
+                          Visibility="{Binding ErrorMessage, Converter={StaticResource StringToVisibility}}" />
+        </StackPanel>
+    </Grid>
+</ui:FluentWindow>

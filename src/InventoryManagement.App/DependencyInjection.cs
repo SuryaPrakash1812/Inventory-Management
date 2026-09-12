@@ -1,5 +1,8 @@
 using InventoryManagement.App.ViewModels;
+using InventoryManagement.App.ViewModels.Auth;
+using InventoryManagement.App.ViewModels.Users;
 using InventoryManagement.App.Views;
+using InventoryManagement.App.Views.Auth;
 using InventoryManagement.App.Views.Pages;
 using Microsoft.Extensions.DependencyInjection;
 using Wpf.Ui.DependencyInjection;
@@ -7,10 +10,10 @@ using Wpf.Ui.DependencyInjection;
 namespace InventoryManagement.App;
 
 /// <summary>
-/// Registers everything the presentation (WPF/App) layer owns: the shell
-/// window, the WPF-UI navigation page provider, and every page + its
-/// ViewModel. Mirrors the AddApplication()/AddInfrastructure() pattern used
-/// by the other layers.
+/// Registers everything the presentation (WPF/App) layer owns: the login
+/// window, the shell window, the WPF-UI navigation page provider, and every
+/// page + its ViewModel. Mirrors the AddApplication()/AddInfrastructure()
+/// pattern used by the other layers.
 /// </summary>
 public static class DependencyInjection
 {
@@ -20,8 +23,18 @@ public static class DependencyInjection
         // instead of calling "new PageType()" itself.
         services.AddNavigationViewPageProvider();
 
-        services.AddSingleton<MainWindow>();
-        services.AddSingleton<ShellViewModel>();
+        services.AddTransient<LoginWindow>();
+        services.AddTransient<LoginViewModel>();
+
+        // MainWindow and ShellViewModel are deliberately Transient, not
+        // Singleton: ShellViewModel builds its permission-filtered nav menu
+        // once, at construction, from whoever is currently signed in. If it
+        // were a Singleton, the very first user's menu (and permissions)
+        // would be cached forever - a second user signing in after a logout
+        // would still see the first user's menu. A fresh instance per login
+        // is required for the logout/re-login flow to behave correctly.
+        services.AddTransient<MainWindow>();
+        services.AddTransient<ShellViewModel>();
 
         // Pages are transient: NavigationView creates a fresh instance on every
         // navigation by default (CacheHistory is 0), so there is no state to
@@ -36,8 +49,10 @@ public static class DependencyInjection
         services.AddTransient<InventoryPage>();
         services.AddTransient<StockAdjustmentsPage>();
         services.AddTransient<ReportsPage>();
-        services.AddTransient<UsersPage>();
         services.AddTransient<BackupPage>();
+
+        services.AddTransient<UsersPage>();
+        services.AddTransient<UsersViewModel>();
 
         services.AddTransient<SettingsPage>();
         services.AddTransient<SettingsViewModel>();
