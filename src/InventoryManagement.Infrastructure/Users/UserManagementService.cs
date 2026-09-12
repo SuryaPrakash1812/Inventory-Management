@@ -64,7 +64,7 @@ public sealed class UserManagementService : IUserManagementService
             AuditAction.Created, nameof(User), user.Id, $"User '{user.Username}' created.", cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
 
-        return await ToSummaryAsync(user.Id, cancellationToken);
+        return Result.Success(await ToSummaryAsync(user.Id, cancellationToken));
     }
 
     public async Task<Result<UserSummary>> UpdateUserAsync(
@@ -85,7 +85,7 @@ public sealed class UserManagementService : IUserManagementService
             AuditAction.Updated, nameof(User), user.Id, $"User '{user.Username}' updated.", cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
 
-        return await ToSummaryAsync(user.Id, cancellationToken);
+        return Result.Success(await ToSummaryAsync(user.Id, cancellationToken));
     }
 
     public async Task<Result> ChangePasswordAsync(

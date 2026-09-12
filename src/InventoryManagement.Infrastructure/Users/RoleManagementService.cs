@@ -112,7 +112,7 @@ public sealed class RoleManagementService : IRoleManagementService
             cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
 
-        return await ToSummaryAsync(role.Id, cancellationToken);
+        return Result.Success(await ToSummaryAsync(role.Id, cancellationToken));
     }
 
     public async Task<Result> DeleteRoleAsync(Guid roleId, CancellationToken cancellationToken = default)
