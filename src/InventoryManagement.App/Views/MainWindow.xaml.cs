@@ -1,3 +1,4 @@
+using System.Windows;
 using InventoryManagement.App.ViewModels;
 using InventoryManagement.App.Views.Pages;
 using Wpf.Ui.Abstractions;
@@ -26,6 +27,18 @@ public partial class MainWindow : FluentWindow
         ApplicationThemeManager.Apply(this);
 
         RootNavigation.SetPageProviderService(pageProvider);
+
+        // NavigationView's internal content presenter isn't ready until its
+        // control template has been applied, which hasn't happened yet at
+        // constructor time - navigating here throws a NullReferenceException
+        // deep inside UpdateContent. Deferring to Loaded guarantees the
+        // template is applied first.
+        Loaded += OnLoaded;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        Loaded -= OnLoaded;
         RootNavigation.Navigate(typeof(DashboardPage));
     }
 }
