@@ -1,6 +1,7 @@
 using InventoryManagement.Application.Settings;
 using Microsoft.Win32;
 using Wpf.Ui.Appearance;
+using Wpf.Ui.Controls;
 
 namespace InventoryManagement.App.Services;
 
