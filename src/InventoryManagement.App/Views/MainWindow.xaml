@@ -1,0 +1,43 @@
+<ui:FluentWindow x:Class="InventoryManagement.App.Views.MainWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="{Binding WindowTitle}"
+                 Height="640"
+                 Width="960"
+                 MinHeight="480"
+                 MinWidth="720"
+                 WindowStartupLocation="CenterScreen"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica"
+                 WindowCornerPreference="Round">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0" Title="{Binding WindowTitle}" />
+
+        <StackPanel Grid.Row="1"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Center"
+                     MaxWidth="480">
+            <ui:TextBlock Text="Inventory Management"
+                          FontTypography="TitleLarge"
+                          HorizontalAlignment="Center"
+                          Margin="0,0,0,8" />
+            <ui:TextBlock Text="Stage 1 - Foundation"
+                          FontTypography="BodyStrong"
+                          Opacity="0.7"
+                          HorizontalAlignment="Center"
+                          Margin="0,0,0,24" />
+            <ui:TextBlock Text="{Binding StartupMessage}"
+                          FontTypography="Caption"
+                          Opacity="0.6"
+                          HorizontalAlignment="Center"
+                          TextWrapping="Wrap" />
+        </StackPanel>
+    </Grid>
+</ui:FluentWindow>

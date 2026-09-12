@@ -1,0 +1,45 @@
+# Build outputs
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+out/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider
+.idea/
+
+# VS Code
+.vscode/
+
+# Test results
+[Tt]est[Rr]esult*/
+*.trx
+*.coverage
+*.coveragexml
+
+# NuGet
+*.nupkg
+**/packages/*
+!**/packages/build/
+
+# Local application data that must never be committed
+*.db
+*.db-shm
+*.db-wal
+appsettings.*.local.json
+*.pfx
+
+# Logs and backups produced at runtime
+/logs/
+/Backups/
+
+# OS files
+.DS_Store
+Thumbs.db
