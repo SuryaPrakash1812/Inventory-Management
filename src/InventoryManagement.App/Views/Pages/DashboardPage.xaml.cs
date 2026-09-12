@@ -8,11 +8,10 @@ namespace InventoryManagement.App.Views.Pages;
 /// </summary>
 public partial class DashboardPage : Page
 {
-    public DashboardPage(ShellViewModel shell)
+    public DashboardPage()
     {
         InitializeComponent();
 
         DataContext = new PlaceholderViewModel("Dashboard", "Key metrics and quick actions will appear here starting in Stage 8 (Dashboard and Reports).");
-        shell.CurrentPageTitle = "Dashboard";
     }
 }

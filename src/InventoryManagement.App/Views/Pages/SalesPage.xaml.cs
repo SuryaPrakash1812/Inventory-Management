@@ -8,11 +8,10 @@ namespace InventoryManagement.App.Views.Pages;
 /// </summary>
 public partial class SalesPage : Page
 {
-    public SalesPage(ShellViewModel shell)
+    public SalesPage()
     {
         InitializeComponent();
 
         DataContext = new PlaceholderViewModel("Sales", "Sales entry and stock-out logic arrive in Stage 6 (Sales).");
-        shell.CurrentPageTitle = "Sales";
     }
 }

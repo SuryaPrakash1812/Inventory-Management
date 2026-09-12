@@ -8,11 +8,10 @@ namespace InventoryManagement.App.Views.Pages;
 /// </summary>
 public partial class BackupPage : Page
 {
-    public BackupPage(ShellViewModel shell)
+    public BackupPage()
     {
         InitializeComponent();
 
         DataContext = new PlaceholderViewModel("Backup", "Local and cloud backup/restore arrive in Stages 11-12 (Backup engine and Cloud providers).");
-        shell.CurrentPageTitle = "Backup";
     }
 }

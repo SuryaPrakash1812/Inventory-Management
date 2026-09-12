@@ -8,11 +8,10 @@ namespace InventoryManagement.App.Views.Pages;
 /// </summary>
 public partial class SuppliersPage : Page
 {
-    public SuppliersPage(ShellViewModel shell)
+    public SuppliersPage()
     {
         InitializeComponent();
 
         DataContext = new PlaceholderViewModel("Suppliers", "Supplier management arrives in Stage 4 (Suppliers and Customers).");
-        shell.CurrentPageTitle = "Suppliers";
     }
 }

@@ -26,6 +26,7 @@ public partial class MainWindow : FluentWindow
         ApplicationThemeManager.Apply(this);
 
         RootNavigation.SetPageProviderService(pageProvider);
+        RootNavigation.SelectionChanged += OnSelectionChanged;
 
         // NavigationView's internal content presenter isn't ready until its
         // control template has been applied, which hasn't happened yet at
@@ -46,6 +47,24 @@ public partial class MainWindow : FluentWindow
         if (firstItem?.TargetPageType is { } targetPageType)
         {
             RootNavigation.Navigate(targetPageType);
+        }
+    }
+
+    /// <summary>
+    /// Updates the header title whenever the sidebar selection changes. This
+    /// is deliberately the one and only place CurrentPageTitle gets set -
+    /// pages themselves used to set it via an injected ShellViewModel, but
+    /// since pages are resolved by WPF-UI's own page provider (not
+    /// necessarily through the same DI scope as this window), that could
+    /// silently update a *different* ShellViewModel instance than the one
+    /// this window is bound to. Reading the selection directly from the
+    /// NavigationView this window already owns has no such ambiguity.
+    /// </summary>
+    private void OnSelectionChanged(NavigationView sender, RoutedEventArgs args)
+    {
+        if (sender.SelectedItem is NavigationViewItem { Content: string title })
+        {
+            ViewModel.CurrentPageTitle = title;
         }
     }
 }

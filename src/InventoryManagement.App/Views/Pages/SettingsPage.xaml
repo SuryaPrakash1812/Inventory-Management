@@ -34,6 +34,12 @@
             </Grid>
         </ui:Card>
 
+        <ui:TextBlock Text="{Binding ConfirmationMessage}"
+                      FontTypography="Caption"
+                      Foreground="Green"
+                      Margin="0,0,0,8"
+                      Visibility="{Binding ConfirmationMessage, Converter={StaticResource StringToVisibility}}" />
+
         <ui:TextBlock Text="More settings (backup defaults, locale, and account preferences) will be added as their stages are implemented."
                       FontTypography="Caption"
                       Opacity="0.6"

@@ -13,7 +13,6 @@ namespace InventoryManagement.App.ViewModels;
 public sealed partial class SettingsViewModel : ViewModelBase
 {
     private readonly ISettingsService _settingsService;
-    private readonly ShellViewModel _shell;
 
     public ObservableCollection<ThemeMode> AvailableThemes { get; } =
         new(Enum.GetValues<ThemeMode>());
@@ -21,14 +20,15 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private ThemeMode _selectedTheme;
 
-    public SettingsViewModel(ISettingsService settingsService, ShellViewModel shell)
+    /// <summary>Local confirmation text shown on this page - not the shared shell status bar, since a page never depends on the shell's specific ShellViewModel instance (see MainWindow.OnSelectionChanged remarks).</summary>
+    [ObservableProperty]
+    private string? _confirmationMessage;
+
+    public SettingsViewModel(ISettingsService settingsService)
     {
         _settingsService = settingsService;
-        _shell = shell;
 
         _selectedTheme = settingsService.Current.Theme;
-
-        shell.CurrentPageTitle = "Settings";
     }
 
     partial void OnSelectedThemeChanged(ThemeMode value)
@@ -38,7 +38,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
         ThemeApplier.Apply(value);
 
-        _shell.IsDarkTheme = value == ThemeMode.Dark;
-        _shell.StatusMessage = $"Theme set to {value}";
+        ConfirmationMessage = $"Theme set to {value}.";
     }
 }
