@@ -15,6 +15,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InventoryManagement.App", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InventoryManagement.Domain.Tests", "tests\InventoryManagement.Domain.Tests\InventoryManagement.Domain.Tests.csproj", "{A1B2C3D4-0006-4000-8000-000000000006}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InventoryManagement.Infrastructure.Tests", "tests\InventoryManagement.Infrastructure.Tests\InventoryManagement.Infrastructure.Tests.csproj", "{A1B2C3D4-0007-4000-8000-000000000007}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

@@ -1,5 +1,7 @@
 using InventoryManagement.Application.Common.Interfaces;
+using InventoryManagement.Application.Settings;
 using InventoryManagement.Infrastructure.Common;
+using InventoryManagement.Infrastructure.Settings;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace InventoryManagement.Infrastructure;
@@ -14,6 +16,7 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services)
     {
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
+        services.AddSingleton<ISettingsService, JsonSettingsService>();
 
         // EF Core DbContext, repositories, and the backup engine are added
         // in their respective stages.

@@ -6,7 +6,27 @@ clean modular architecture.
 
 ## Status
 
-Currently in **Stage 1 - Foundation**. See "Stages" below for the full plan.
+**Stage 1 - Project Foundation: complete.** This stage delivers the app shell,
+navigation, theming, settings, and error-handling infrastructure with
+placeholder pages for every planned feature - no inventory business logic yet.
+
+What's in place:
+
+- Solution structure (Core / Domain / Application / Infrastructure / App / Tests)
+- WPF + MVVM (CommunityToolkit.Mvvm) + dependency injection (generic Host)
+- Structured logging (Serilog: rolling file + debug sink)
+- App shell: title bar, sidebar navigation, header (current page title, theme
+  toggle, user area), content frame, status bar
+- Navigation infrastructure (WPF-UI `NavigationView`, DI-resolved pages)
+- Light/Dark/System theme infrastructure, with a working toggle and a
+  Settings page that persists the choice
+- Global error handling (UI-thread, background-thread, and unobserved-task
+  exceptions all logged and shown as a friendly message instead of crashing)
+- Settings infrastructure (`ISettingsService` backed by a local JSON file,
+  atomic writes, resilient to a corrupt file)
+- Placeholder navigation pages for every planned feature: Dashboard, Products,
+  Categories, Suppliers, Customers, Purchases, Sales, Inventory, Stock
+  Adjustments, Reports, Users, Backup, and a real Settings page
 
 ## Architecture
 

@@ -3,10 +3,10 @@
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  Title="{Binding WindowTitle}"
-                 Height="640"
-                 Width="960"
-                 MinHeight="480"
-                 MinWidth="720"
+                 Height="760"
+                 Width="1240"
+                 MinHeight="560"
+                 MinWidth="860"
                  WindowStartupLocation="CenterScreen"
                  ExtendsContentIntoTitleBar="True"
                  WindowBackdropType="Mica"
@@ -15,29 +15,64 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <!-- Title bar -->
             <RowDefinition Height="*" />
+            <!-- Navigation + content -->
+            <RowDefinition Height="Auto" />
+            <!-- Status bar -->
         </Grid.RowDefinitions>
 
         <ui:TitleBar Grid.Row="0" Title="{Binding WindowTitle}" />
 
-        <StackPanel Grid.Row="1"
-                     HorizontalAlignment="Center"
-                     VerticalAlignment="Center"
-                     MaxWidth="480">
-            <ui:TextBlock Text="Inventory Management"
-                          FontTypography="TitleLarge"
-                          HorizontalAlignment="Center"
-                          Margin="0,0,0,8" />
-            <ui:TextBlock Text="Stage 1 - Foundation"
-                          FontTypography="BodyStrong"
-                          Opacity="0.7"
-                          HorizontalAlignment="Center"
-                          Margin="0,0,0,24" />
-            <ui:TextBlock Text="{Binding StartupMessage}"
-                          FontTypography="Caption"
-                          Opacity="0.6"
-                          HorizontalAlignment="Center"
-                          TextWrapping="Wrap" />
+        <ui:NavigationView x:Name="RootNavigation"
+                           Grid.Row="1"
+                           MenuItemsSource="{Binding MenuItems}"
+                           FooterMenuItemsSource="{Binding FooterMenuItems}">
+            <ui:NavigationView.Header>
+                <Grid Margin="24,20,24,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <ui:TextBlock Grid.Column="0"
+                                  Text="{Binding CurrentPageTitle}"
+                                  FontTypography="Title"
+                                  VerticalAlignment="Center" />
+
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center">
+                        <ui:Button Content="Toggle theme"
+                                   Command="{Binding ToggleThemeCommand}"
+                                   Margin="0,0,16,0" />
+
+                        <ui:TextBlock Text="{Binding UserDisplayName}"
+                                      FontTypography="Body"
+                                      VerticalAlignment="Center" />
+                    </StackPanel>
+                </Grid>
+            </ui:NavigationView.Header>
+        </ui:NavigationView>
+
+        <StackPanel Grid.Row="2">
+            <Separator />
+            <Grid Margin="16,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <ui:TextBlock Grid.Column="0"
+                              Text="{Binding StatusMessage}"
+                              FontTypography="Caption"
+                              Opacity="0.7" />
+
+                <ui:TextBlock Grid.Column="1"
+                              Text="Stage 1 - Foundation"
+                              FontTypography="Caption"
+                              Opacity="0.5" />
+            </Grid>
         </StackPanel>
     </Grid>
 </ui:FluentWindow>

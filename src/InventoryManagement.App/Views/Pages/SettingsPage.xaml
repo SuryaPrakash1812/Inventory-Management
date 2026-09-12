@@ -1,0 +1,43 @@
+<Page x:Class="InventoryManagement.App.Views.Pages.SettingsPage"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+      Title="Settings">
+    <StackPanel Margin="24" MaxWidth="520" HorizontalAlignment="Left">
+        <ui:TextBlock Text="Settings"
+                      FontTypography="TitleLarge"
+                      Margin="0,0,0,20" />
+
+        <ui:TextBlock Text="Appearance"
+                      FontTypography="BodyStrong"
+                      Margin="0,0,0,8" />
+
+        <ui:Card Margin="0,0,0,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <ui:TextBlock Text="Theme" FontTypography="Body" />
+                    <ui:TextBlock Text="Choose how Inventory Management looks."
+                                  FontTypography="Caption"
+                                  Opacity="0.6" />
+                </StackPanel>
+
+                <ComboBox Grid.Column="1"
+                          MinWidth="140"
+                          VerticalAlignment="Center"
+                          ItemsSource="{Binding AvailableThemes}"
+                          SelectedItem="{Binding SelectedTheme}" />
+            </Grid>
+        </ui:Card>
+
+        <ui:TextBlock Text="More settings (backup defaults, locale, and account preferences) will be added as their stages are implemented."
+                      FontTypography="Caption"
+                      Opacity="0.6"
+                      TextWrapping="Wrap"
+                      Margin="0,16,0,0" />
+    </StackPanel>
+</Page>
