@@ -22,6 +22,9 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(p => p.Description)
             .HasMaxLength(2000);
 
+        builder.Property(p => p.Brand)
+            .HasMaxLength(200);
+
         builder.Property(p => p.Unit)
             .IsRequired()
             .HasMaxLength(20);
@@ -32,6 +35,7 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         // regardless of the storage format.
         builder.Property(p => p.CostPrice).HasPrecision(18, 4);
         builder.Property(p => p.SellingPrice).HasPrecision(18, 4);
+        builder.Property(p => p.TaxPercentage).HasPrecision(5, 2);
         builder.Property(p => p.ReorderLevel).HasPrecision(18, 4);
         builder.Property(p => p.QuantityOnHand).HasPrecision(18, 4);
 

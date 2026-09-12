@@ -1,5 +1,7 @@
 using InventoryManagement.App.ViewModels;
 using InventoryManagement.App.ViewModels.Auth;
+using InventoryManagement.App.ViewModels.Categories;
+using InventoryManagement.App.ViewModels.Products;
 using InventoryManagement.App.ViewModels.Users;
 using InventoryManagement.App.Views;
 using InventoryManagement.App.Views.Auth;
@@ -41,7 +43,9 @@ public static class DependencyInjection
         // preserve between visits for these simple pages.
         services.AddTransient<DashboardPage>();
         services.AddTransient<ProductsPage>();
+        services.AddTransient<ProductsViewModel>();
         services.AddTransient<CategoriesPage>();
+        services.AddTransient<CategoriesViewModel>();
         services.AddTransient<SuppliersPage>();
         services.AddTransient<CustomersPage>();
         services.AddTransient<PurchasesPage>();

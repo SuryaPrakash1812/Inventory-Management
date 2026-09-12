@@ -22,6 +22,8 @@ public class Product : AuditableSoftDeleteEntity
 
     public string? Description { get; set; }
 
+    public string? Brand { get; set; }
+
     public Guid CategoryId { get; set; }
 
     public Category Category { get; set; } = null!;
@@ -36,6 +38,9 @@ public class Product : AuditableSoftDeleteEntity
     public decimal CostPrice { get; set; }
 
     public decimal SellingPrice { get; set; }
+
+    /// <summary>Percentage (0-100) of tax applied to sales of this product.</summary>
+    public decimal TaxPercentage { get; set; }
 
     /// <summary>Stock level below which the product should be reordered.</summary>
     public decimal ReorderLevel { get; set; }
