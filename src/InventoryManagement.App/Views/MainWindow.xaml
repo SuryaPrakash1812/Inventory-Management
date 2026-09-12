@@ -8,6 +8,7 @@
                  MinHeight="560"
                  MinWidth="860"
                  WindowStartupLocation="CenterScreen"
+                 WindowState="Maximized"
                  ExtendsContentIntoTitleBar="True"
                  WindowBackdropType="Mica"
                  WindowCornerPreference="Round">
@@ -69,7 +70,7 @@
                               Opacity="0.7" />
 
                 <ui:TextBlock Grid.Column="1"
-                              Text="Stage 1 - Foundation"
+                              Text="v0.1.0"
                               FontTypography="Caption"
                               Opacity="0.5" />
             </Grid>
