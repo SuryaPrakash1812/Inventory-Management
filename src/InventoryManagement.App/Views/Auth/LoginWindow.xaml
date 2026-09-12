@@ -5,7 +5,7 @@
                  xmlns:converters="clr-namespace:InventoryManagement.App.Converters"
                  Title="Inventory Management"
                  Height="600"
-                 Width="420"
+                 Width="460"
                  ResizeMode="NoResize"
                  WindowStartupLocation="CenterScreen"
                  ExtendsContentIntoTitleBar="True"
@@ -26,11 +26,13 @@
         <StackPanel Grid.Row="1"
                     VerticalAlignment="Center"
                     HorizontalAlignment="Center"
-                    Width="300">
+                    Width="340">
 
             <ui:TextBlock Text="Inventory Management"
-                          FontTypography="TitleLarge"
+                          FontTypography="Title"
                           HorizontalAlignment="Center"
+                          TextWrapping="Wrap"
+                          TextAlignment="Center"
                           Margin="0,0,0,4" />
 
             <!-- First-run: create the administrator account -->
@@ -72,6 +74,8 @@
                               FontTypography="Body"
                               Opacity="0.65"
                               HorizontalAlignment="Center"
+                              TextWrapping="Wrap"
+                              TextAlignment="Center"
                               Margin="0,0,0,24" />
 
                 <ui:TextBox Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"
