@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
+using WpfApplication = System.Windows.Application;
 
 namespace InventoryManagement.App;
 
@@ -17,7 +18,7 @@ namespace InventoryManagement.App;
 /// first window. Feature registration happens inside each layer's own
 /// AddXxx() extension method (AddApplication, AddInfrastructure, ...).
 /// </summary>
-public partial class App : System.Windows.Application
+public partial class App : WpfApplication
 {
     private IHost? _host;
 
