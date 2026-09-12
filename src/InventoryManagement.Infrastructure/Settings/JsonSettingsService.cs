@@ -1,6 +1,6 @@
 using System.Text.Json;
 using InventoryManagement.Application.Settings;
-using InventoryManagement.Infrastructure.Logging;
+using InventoryManagement.Infrastructure.Common;
 using Microsoft.Extensions.Logging;
 
 namespace InventoryManagement.Infrastructure.Settings;
@@ -23,7 +23,7 @@ public sealed class JsonSettingsService : ISettingsService
     public AppSettings Current { get; private set; } = new();
 
     public JsonSettingsService(ILogger<JsonSettingsService> logger)
-        : this(logger, SerilogConfigurator.AppDataRoot)
+        : this(logger, AppPaths.AppDataRoot)
     {
     }
 

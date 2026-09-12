@@ -1,3 +1,4 @@
+using InventoryManagement.Infrastructure.Common;
 using Serilog;
 using Serilog.Events;
 
@@ -14,15 +15,11 @@ namespace InventoryManagement.Infrastructure.Logging;
 /// </summary>
 public static class SerilogConfigurator
 {
-    /// <summary>
-    /// Root folder for all application data (database, logs, backups), rooted
-    /// under the current user's AppData so no admin rights are ever required.
-    /// </summary>
-    public static string AppDataRoot { get; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "InventoryManagement");
+    /// <summary>Kept for existing call sites; delegates to <see cref="AppPaths.AppDataRoot"/>.</summary>
+    public static string AppDataRoot => AppPaths.AppDataRoot;
 
-    public static string LogsFolder { get; } = Path.Combine(AppDataRoot, "logs");
+    /// <summary>Kept for existing call sites; delegates to <see cref="AppPaths.LogsFolder"/>.</summary>
+    public static string LogsFolder => AppPaths.LogsFolder;
 
     public static Serilog.ILogger CreateLogger()
     {

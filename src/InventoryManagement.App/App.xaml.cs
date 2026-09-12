@@ -4,6 +4,7 @@ using System.Windows.Threading;
 using InventoryManagement.App.Services;
 using InventoryManagement.App.Views;
 using InventoryManagement.Application;
+using InventoryManagement.Application.Common.Interfaces;
 using InventoryManagement.Application.Settings;
 using InventoryManagement.Infrastructure;
 using InventoryManagement.Infrastructure.Logging;
@@ -54,6 +55,16 @@ public partial class App : WpfApplication
                 .Build();
 
             await _host.StartAsync();
+
+            // IDatabaseInitializer depends on the (Scoped) InventoryDbContext,
+            // so it must be resolved through an explicit scope rather than
+            // straight from the root provider - the root provider only ever
+            // holds singletons.
+            using (var scope = _host.Services.CreateScope())
+            {
+                var databaseInitializer = scope.ServiceProvider.GetRequiredService<IDatabaseInitializer>();
+                await databaseInitializer.InitializeAsync();
+            }
 
             // Load persisted preferences and apply the theme before the first
             // window is shown, so there is no visible "flash" of the default

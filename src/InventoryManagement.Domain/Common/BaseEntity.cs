@@ -8,7 +8,7 @@ namespace InventoryManagement.Domain.Common;
 /// </summary>
 public abstract class BaseEntity
 {
-    public Guid Id { get; protected set; } = Guid.NewGuid();
+    public Guid Id { get; internal set; } = Guid.NewGuid();
 
     /// <summary>
     /// Row version used by EF Core for optimistic concurrency control, preventing

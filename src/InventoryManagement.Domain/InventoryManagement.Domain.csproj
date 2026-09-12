@@ -9,4 +9,9 @@
     <ProjectReference Include="..\InventoryManagement.Core\InventoryManagement.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="InventoryManagement.Domain.Tests" />
+    <InternalsVisibleTo Include="InventoryManagement.Infrastructure" />
+  </ItemGroup>
+
 </Project>

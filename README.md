@@ -6,6 +6,9 @@ clean modular architecture.
 
 ## Status
 
+**Stage 2 - Local Database: complete** (pending a one-time manual step - see
+`src/InventoryManagement.Infrastructure/Data/README.md`).
+
 **Stage 1 - Project Foundation: complete.** This stage delivers the app shell,
 navigation, theming, settings, and error-handling infrastructure with
 placeholder pages for every planned feature - no inventory business logic yet.
@@ -68,8 +71,8 @@ dotnet run --project src\InventoryManagement.App\InventoryManagement.App.csproj
 
 ## Stage plan
 
-1. **Foundation** - solution/project skeleton, DI, logging, app shell *(current)*
-2. **Data layer** - SQLite + EF Core, base entities, migrations
+1. **Foundation** - solution/project skeleton, DI, logging, app shell *(complete)*
+2. **Data layer** - SQLite + EF Core, base entities, migrations *(complete - see note above)*
 3. **Products & Categories** - first full vertical slice
 4. **Suppliers & Customers**
 5. **Purchases**
