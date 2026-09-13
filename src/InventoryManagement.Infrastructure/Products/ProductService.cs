@@ -39,14 +39,43 @@ public sealed class ProductService : IProductService
         var pageNumber = Math.Max(1, query.PageNumber);
         var pageSize = query.PageSize <= 0 ? 25 : query.PageSize;
 
-        var items = await ApplySort(filtered, query.SortColumn, query.SortDescending)
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
-            .Select(p => new ProductSummary(
-                p.Id, p.Sku, p.Barcode, p.Name, p.Brand, p.CategoryId, p.Category.Name, p.Unit,
-                p.CostPrice, p.SellingPrice, p.TaxPercentage, p.ReorderLevel, p.QuantityOnHand,
-                p.IsActive, p.CreatedAtUtc, p.ModifiedAtUtc))
-            .ToListAsync(cancellationToken);
+        List<ProductSummary> items;
+
+        if (query.SortColumn == ProductSortColumn.CreatedAtUtc)
+        {
+            // SQLite's EF Core provider cannot translate ORDER BY on a
+            // DateTimeOffset column into SQL ("SQLite does not support
+            // expressions of type 'DateTimeOffset' in ORDER BY clauses") -
+            // a genuine limitation of that provider, unrelated to how the
+            // search was triggered. Every other sort column here is a
+            // string or decimal, which SQLite orders natively; this is the
+            // one case that needs an in-memory fallback rather than
+            // changing how every timestamp in the schema is stored, which
+            // would be a much larger change for one sort option.
+            var all = await filtered
+                .Select(p => new ProductSummary(
+                    p.Id, p.Sku, p.Barcode, p.Name, p.Brand, p.CategoryId, p.Category.Name, p.Unit,
+                    p.CostPrice, p.SellingPrice, p.TaxPercentage, p.ReorderLevel, p.QuantityOnHand,
+                    p.IsActive, p.CreatedAtUtc, p.ModifiedAtUtc))
+                .ToListAsync(cancellationToken);
+
+            var sorted = query.SortDescending
+                ? all.OrderByDescending(p => p.CreatedAtUtc)
+                : all.OrderBy(p => p.CreatedAtUtc);
+
+            items = sorted.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
+        }
+        else
+        {
+            items = await ApplySort(filtered, query.SortColumn, query.SortDescending)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(p => new ProductSummary(
+                    p.Id, p.Sku, p.Barcode, p.Name, p.Brand, p.CategoryId, p.Category.Name, p.Unit,
+                    p.CostPrice, p.SellingPrice, p.TaxPercentage, p.ReorderLevel, p.QuantityOnHand,
+                    p.IsActive, p.CreatedAtUtc, p.ModifiedAtUtc))
+                .ToListAsync(cancellationToken);
+        }
 
         return new PagedResult<ProductSummary>(items, totalCount, pageNumber, pageSize);
     }
@@ -456,6 +485,13 @@ public sealed class ProductService : IProductService
         return products;
     }
 
+    /// <summary>
+    /// Note: ProductSortColumn.CreatedAtUtc is deliberately NOT handled here -
+    /// SQLite cannot translate ORDER BY on a DateTimeOffset column, so
+    /// GetProductsAsync branches around this method entirely for that case
+    /// (see its in-memory fallback). Do not add a CreatedAtUtc case back
+    /// here without also removing that branch, or the crash returns.
+    /// </summary>
     private static IQueryable<Product> ApplySort(IQueryable<Product> products, ProductSortColumn column, bool descending)
     {
         return column switch
@@ -470,9 +506,6 @@ public sealed class ProductService : IProductService
             ProductSortColumn.CurrentStock => descending
                 ? products.OrderByDescending(p => p.QuantityOnHand)
                 : products.OrderBy(p => p.QuantityOnHand),
-            ProductSortColumn.CreatedAtUtc => descending
-                ? products.OrderByDescending(p => p.CreatedAtUtc)
-                : products.OrderBy(p => p.CreatedAtUtc),
             _ => descending ? products.OrderByDescending(p => p.Name) : products.OrderBy(p => p.Name),
         };
     }

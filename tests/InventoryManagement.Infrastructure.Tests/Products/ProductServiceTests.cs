@@ -162,6 +162,34 @@ public class ProductServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task GetProductsAsync_SortByCreatedAtUtc_DoesNotThrow()
+    {
+        // Regression test: SQLite's EF Core provider cannot translate
+        // ORDER BY on a DateTimeOffset column server-side. This used to
+        // throw NotSupportedException the instant a user picked "Date
+        // Added" as the sort column.
+        await _sut.CreateProductAsync(MakeRequest("DATE-1", "First"));
+        await _sut.CreateProductAsync(MakeRequest("DATE-2", "Second"));
+        await _sut.CreateProductAsync(MakeRequest("DATE-3", "Third"));
+
+        var ascending = await _sut.GetProductsAsync(new ProductQueryParameters
+        {
+            SortColumn = ProductSortColumn.CreatedAtUtc,
+            SortDescending = false,
+        });
+
+        var descending = await _sut.GetProductsAsync(new ProductQueryParameters
+        {
+            SortColumn = ProductSortColumn.CreatedAtUtc,
+            SortDescending = true,
+        });
+
+        Assert.Equal(3, ascending.Items.Count);
+        Assert.Equal(3, descending.Items.Count);
+        Assert.Equal(ascending.Items.Select(p => p.Sku), descending.Items.Select(p => p.Sku).Reverse());
+    }
+
+    [Fact]
     public async Task ExportThenImport_RoundTripsExistingProductAsUpdate()
     {
         var created = await _sut.CreateProductAsync(MakeRequest("EXP-1", "Exportable"));
