@@ -97,145 +97,160 @@
             </WrapPanel>
         </Grid>
 
-        <!-- EDIT VIEW: full width, its own dedicated screen. -->
+        <!-- EDIT VIEW: full width, its own dedicated screen. The outer Grid
+             has an explicit (if transparent) Background so it is
+             hit-testable across its ENTIRE width - without this, mouse-wheel
+             scrolling only worked directly over the form itself or the
+             scrollbar track, since the empty space beside a narrow
+             left-aligned StackPanel isn't part of any hit-testable element
+             by default. -->
         <ScrollViewer Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}"
                       VerticalScrollBarVisibility="Auto">
-            <StackPanel MaxWidth="760" HorizontalAlignment="Left">
-                <ui:Button Content="&#x2190; Back to Products"
-                           Command="{Binding CancelEditCommand}"
-                           Appearance="Transparent"
-                           HorizontalAlignment="Left"
-                           Margin="0,0,0,16" />
+            <Grid Background="Transparent">
+                <StackPanel MaxWidth="900" HorizontalAlignment="Left">
+                    <ui:Button Content="&#x2190; Back to Products"
+                               Command="{Binding CancelEditCommand}"
+                               Appearance="Transparent"
+                               HorizontalAlignment="Left"
+                               Margin="0,0,0,12" />
 
-                <ui:TextBlock Text="Product Details" FontTypography="TitleLarge" Margin="0,0,0,20" />
+                    <ui:Card Padding="28">
+                        <StackPanel>
+                            <ui:TextBlock Text="Product Details" FontTypography="TitleLarge" Margin="0,0,0,24" />
 
-                <Grid Margin="0,0,0,4">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="16" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0">
-                        <ui:TextBlock Text="SKU (required)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
-                        <ui:TextBox Text="{Binding FormSku, UpdateSourceTrigger=PropertyChanged}"
-                                    IsEnabled="{Binding IsNewProduct}"
-                                    Margin="0,0,0,14" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="2">
-                        <ui:TextBlock Text="Barcode (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
-                        <ui:TextBox Text="{Binding FormBarcode, UpdateSourceTrigger=PropertyChanged}"
-                                    Margin="0,0,0,14" />
-                    </StackPanel>
-                </Grid>
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="24" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <ui:TextBlock Text="SKU (required)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                                    <ui:TextBox Text="{Binding FormSku, UpdateSourceTrigger=PropertyChanged}"
+                                                IsEnabled="{Binding IsNewProduct}"
+                                                Margin="0,0,0,16" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <ui:TextBlock Text="Barcode (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                                    <ui:TextBox Text="{Binding FormBarcode, UpdateSourceTrigger=PropertyChanged}"
+                                                Margin="0,0,0,16" />
+                                </StackPanel>
+                            </Grid>
 
-                <Grid Margin="0,0,0,4">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="16" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0">
-                        <ui:TextBlock Text="Name (required)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
-                        <ui:TextBox Text="{Binding FormName, UpdateSourceTrigger=PropertyChanged}"
-                                    Margin="0,0,0,14" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="2">
-                        <ui:TextBlock Text="Brand (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
-                        <ui:TextBox Text="{Binding FormBrand, UpdateSourceTrigger=PropertyChanged}"
-                                    Margin="0,0,0,14" />
-                    </StackPanel>
-                </Grid>
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="24" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <ui:TextBlock Text="Name (required)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                                    <ui:TextBox Text="{Binding FormName, UpdateSourceTrigger=PropertyChanged}"
+                                                Margin="0,0,0,16" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <ui:TextBlock Text="Brand (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                                    <ui:TextBox Text="{Binding FormBrand, UpdateSourceTrigger=PropertyChanged}"
+                                                Margin="0,0,0,16" />
+                                </StackPanel>
+                            </Grid>
 
-                <ui:TextBlock Text="Description (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
-                <ui:TextBox Text="{Binding FormDescription, UpdateSourceTrigger=PropertyChanged}"
-                            AcceptsReturn="True"
-                            TextWrapping="Wrap"
-                            Height="70"
-                            Margin="0,0,0,14" />
+                            <ui:TextBlock Text="Description (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                            <ui:TextBox Text="{Binding FormDescription, UpdateSourceTrigger=PropertyChanged}"
+                                        AcceptsReturn="True"
+                                        TextWrapping="Wrap"
+                                        Height="80"
+                                        Margin="0,0,0,16" />
 
-                <Grid Margin="0,0,0,4">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="16" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0">
-                        <ui:TextBlock Text="Category (required)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
-                        <ComboBox ItemsSource="{Binding Categories}"
-                                  SelectedItem="{Binding FormCategory}"
-                                  DisplayMemberPath="Name"
-                                  Margin="0,0,0,14" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="2">
-                        <ui:TextBlock Text="Unit (required, e.g. pcs, kg)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
-                        <ui:TextBox Text="{Binding FormUnit, UpdateSourceTrigger=PropertyChanged}"
-                                    Margin="0,0,0,14" />
-                    </StackPanel>
-                </Grid>
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="24" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <ui:TextBlock Text="Category (required)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                                    <ComboBox ItemsSource="{Binding Categories}"
+                                              SelectedItem="{Binding FormCategory}"
+                                              DisplayMemberPath="Name"
+                                              Margin="0,0,0,16" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <ui:TextBlock Text="Unit (required, e.g. pcs, kg)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                                    <ui:TextBox Text="{Binding FormUnit, UpdateSourceTrigger=PropertyChanged}"
+                                                Margin="0,0,0,16" />
+                                </StackPanel>
+                            </Grid>
 
-                <Grid Margin="0,0,0,4">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="16" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0">
-                        <ui:TextBlock Text="Purchase price (required)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
-                        <ui:TextBox Text="{Binding FormPurchasePrice}" GotFocus="OnNumericFieldGotFocus" Margin="0,0,0,14" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="2">
-                        <ui:TextBlock Text="Selling price (required)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
-                        <ui:TextBox Text="{Binding FormSellingPrice}" GotFocus="OnNumericFieldGotFocus" Margin="0,0,0,14" />
-                    </StackPanel>
-                </Grid>
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="24" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="24" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <ui:TextBlock Text="Purchase price (required)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                                    <ui:TextBox Text="{Binding FormPurchasePrice}" GotFocus="OnNumericFieldGotFocus" Margin="0,0,0,16" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <ui:TextBlock Text="Selling price (required)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                                    <ui:TextBox Text="{Binding FormSellingPrice}" GotFocus="OnNumericFieldGotFocus" Margin="0,0,0,16" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="4">
+                                    <ui:TextBlock Text="Tax % (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                                    <ui:TextBox Text="{Binding FormTaxPercentage}" GotFocus="OnNumericFieldGotFocus" Margin="0,0,0,16" />
+                                </StackPanel>
+                            </Grid>
 
-                <Grid Margin="0,0,0,4">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="16" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0">
-                        <ui:TextBlock Text="Tax % (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
-                        <ui:TextBox Text="{Binding FormTaxPercentage}" GotFocus="OnNumericFieldGotFocus" Margin="0,0,0,14" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="2">
-                        <ui:TextBlock Text="Minimum stock (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
-                        <ui:TextBox Text="{Binding FormMinimumStock}" GotFocus="OnNumericFieldGotFocus" Margin="0,0,0,14" />
-                    </StackPanel>
-                </Grid>
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="24" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <ui:TextBlock Text="Minimum stock (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                                    <ui:TextBox Text="{Binding FormMinimumStock}" GotFocus="OnNumericFieldGotFocus" Margin="0,0,0,16" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2"
+                                            Visibility="{Binding IsNewProduct, Converter={StaticResource BoolToVisibility}}">
+                                    <ui:TextBlock Text="Initial stock (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                                    <ui:TextBox Text="{Binding FormInitialStock}" GotFocus="OnNumericFieldGotFocus" Margin="0,0,0,16" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2"
+                                            Visibility="{Binding IsNewProduct, Converter={StaticResource InverseBoolToVisibility}}">
+                                    <ui:TextBlock Text="Current stock" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                                    <ui:TextBlock Text="{Binding FormCurrentStock, StringFormat=N2}" FontTypography="BodyStrong" Margin="0,0,0,16" />
+                                </StackPanel>
+                            </Grid>
 
-                <StackPanel Visibility="{Binding IsNewProduct, Converter={StaticResource BoolToVisibility}}"
-                            Margin="0,0,0,14">
-                    <ui:TextBlock Text="Initial stock (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
-                    <ui:TextBox Text="{Binding FormInitialStock}" GotFocus="OnNumericFieldGotFocus" MaxWidth="360" HorizontalAlignment="Left" />
+                            <ui:TextBlock Text="Stock changes through purchases, sales, and adjustments in later stages - not editable here."
+                                          Visibility="{Binding IsNewProduct, Converter={StaticResource InverseBoolToVisibility}}"
+                                          FontTypography="Caption"
+                                          Opacity="0.5"
+                                          TextWrapping="Wrap"
+                                          Margin="0,0,0,12" />
+
+                            <CheckBox Content="Active"
+                                      IsChecked="{Binding FormIsActive}"
+                                      Visibility="{Binding IsNewProduct, Converter={StaticResource InverseBoolToVisibility}}"
+                                      Margin="0,0,0,16" />
+
+                            <ui:TextBlock Text="{Binding ErrorMessage}"
+                                          Foreground="IndianRed"
+                                          TextWrapping="Wrap"
+                                          Margin="0,0,0,12" />
+
+                            <StackPanel Orientation="Horizontal">
+                                <ui:Button Content="Save" Command="{Binding SaveCommand}" Appearance="Primary" Margin="0,0,8,0" />
+                                <ui:Button Content="Cancel" Command="{Binding CancelEditCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </ui:Card>
                 </StackPanel>
-
-                <StackPanel Visibility="{Binding IsNewProduct, Converter={StaticResource InverseBoolToVisibility}}"
-                            Margin="0,0,0,14">
-                    <ui:TextBlock Text="Current stock" FontTypography="Caption" Opacity="0.6" />
-                    <ui:TextBlock Text="{Binding FormCurrentStock, StringFormat=N2}" FontTypography="BodyStrong" />
-                    <ui:TextBlock Text="Stock changes through purchases, sales, and adjustments in later stages - not editable here."
-                                  FontTypography="Caption"
-                                  Opacity="0.5"
-                                  TextWrapping="Wrap" />
-                </StackPanel>
-
-                <CheckBox Content="Active"
-                          IsChecked="{Binding FormIsActive}"
-                          Visibility="{Binding IsNewProduct, Converter={StaticResource InverseBoolToVisibility}}"
-                          Margin="0,0,0,16" />
-
-                <ui:TextBlock Text="{Binding ErrorMessage}"
-                              Foreground="IndianRed"
-                              TextWrapping="Wrap"
-                              Margin="0,0,0,12" />
-
-                <StackPanel Orientation="Horizontal">
-                    <ui:Button Content="Save" Command="{Binding SaveCommand}" Appearance="Primary" Margin="0,0,8,0" />
-                    <ui:Button Content="Cancel" Command="{Binding CancelEditCommand}" />
-                </StackPanel>
-            </StackPanel>
+            </Grid>
         </ScrollViewer>
     </Grid>
 </Page>

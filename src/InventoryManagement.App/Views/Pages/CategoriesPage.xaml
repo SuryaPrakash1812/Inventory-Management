@@ -60,37 +60,43 @@
         <!-- EDIT VIEW: full width, its own dedicated screen. -->
         <ScrollViewer Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}"
                       VerticalScrollBarVisibility="Auto">
-            <StackPanel MaxWidth="560" HorizontalAlignment="Left">
-                <ui:Button Content="&#x2190; Back to Categories"
-                           Command="{Binding CancelEditCommand}"
-                           Appearance="Transparent"
-                           HorizontalAlignment="Left"
-                           Margin="0,0,0,16" />
+            <Grid Background="Transparent">
+                <StackPanel MaxWidth="640" HorizontalAlignment="Left">
+                    <ui:Button Content="&#x2190; Back to Categories"
+                               Command="{Binding CancelEditCommand}"
+                               Appearance="Transparent"
+                               HorizontalAlignment="Left"
+                               Margin="0,0,0,12" />
 
-                <ui:TextBlock Text="Category Details" FontTypography="TitleLarge" Margin="0,0,0,20" />
+                    <ui:Card Padding="28">
+                        <StackPanel>
+                            <ui:TextBlock Text="Category Details" FontTypography="TitleLarge" Margin="0,0,0,24" />
 
-                <ui:TextBlock Text="Name (required)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
-                <ui:TextBox Text="{Binding FormName, UpdateSourceTrigger=PropertyChanged}"
-                            Margin="0,0,0,14" />
+                            <ui:TextBlock Text="Name (required)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                            <ui:TextBox Text="{Binding FormName, UpdateSourceTrigger=PropertyChanged}"
+                                        Margin="0,0,0,16" />
 
-                <ui:TextBlock Text="Description (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
-                <ui:TextBox Text="{Binding FormDescription, UpdateSourceTrigger=PropertyChanged}"
-                            AcceptsReturn="True"
-                            TextWrapping="Wrap"
-                            Height="70"
-                            Margin="0,0,0,14" />
+                            <ui:TextBlock Text="Description (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                            <ui:TextBox Text="{Binding FormDescription, UpdateSourceTrigger=PropertyChanged}"
+                                        AcceptsReturn="True"
+                                        TextWrapping="Wrap"
+                                        Height="80"
+                                        Margin="0,0,0,16" />
 
-                <ui:TextBlock Text="Parent category (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
-                <ComboBox ItemsSource="{Binding ParentCategoryOptions}"
-                          SelectedItem="{Binding FormParentCategory}"
-                          DisplayMemberPath="Name"
-                          Margin="0,0,0,20" />
+                            <ui:TextBlock Text="Parent category (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                            <ComboBox ItemsSource="{Binding ParentCategoryOptions}"
+                                      SelectedItem="{Binding FormParentCategory}"
+                                      DisplayMemberPath="Name"
+                                      Margin="0,0,0,24" />
 
-                <StackPanel Orientation="Horizontal">
-                    <ui:Button Content="Save" Command="{Binding SaveCommand}" Appearance="Primary" Margin="0,0,8,0" />
-                    <ui:Button Content="Cancel" Command="{Binding CancelEditCommand}" />
+                            <StackPanel Orientation="Horizontal">
+                                <ui:Button Content="Save" Command="{Binding SaveCommand}" Appearance="Primary" Margin="0,0,8,0" />
+                                <ui:Button Content="Cancel" Command="{Binding CancelEditCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </ui:Card>
                 </StackPanel>
-            </StackPanel>
+            </Grid>
         </ScrollViewer>
     </Grid>
 </Page>
