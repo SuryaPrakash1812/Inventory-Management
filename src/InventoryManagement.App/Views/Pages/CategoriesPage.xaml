@@ -59,9 +59,10 @@
 
         <!-- EDIT VIEW: full width, its own dedicated screen. -->
         <ScrollViewer Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}"
-                      VerticalScrollBarVisibility="Auto">
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalContentAlignment="Stretch">
             <Grid Background="Transparent">
-                <StackPanel MaxWidth="640" HorizontalAlignment="Left">
+                <StackPanel MaxWidth="640" HorizontalAlignment="Center">
                     <ui:Button Content="&#x2190; Back to Categories"
                                Command="{Binding CancelEditCommand}"
                                Appearance="Transparent"

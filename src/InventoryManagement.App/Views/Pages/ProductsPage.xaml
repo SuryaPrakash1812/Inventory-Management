@@ -105,9 +105,10 @@
              left-aligned StackPanel isn't part of any hit-testable element
              by default. -->
         <ScrollViewer Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}"
-                      VerticalScrollBarVisibility="Auto">
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalContentAlignment="Stretch">
             <Grid Background="Transparent">
-                <StackPanel MaxWidth="900" HorizontalAlignment="Left">
+                <StackPanel MaxWidth="900" HorizontalAlignment="Center">
                     <ui:Button Content="&#x2190; Back to Products"
                                Command="{Binding CancelEditCommand}"
                                Appearance="Transparent"
