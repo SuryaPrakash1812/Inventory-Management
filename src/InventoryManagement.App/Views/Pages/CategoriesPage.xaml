@@ -64,12 +64,13 @@
                 <StackPanel>
                     <ui:TextBlock Text="Category Details" FontTypography="BodyStrong" Margin="0,0,0,12" />
 
+                    <ui:TextBlock Text="Name (required)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
                     <ui:TextBox Text="{Binding FormName, UpdateSourceTrigger=PropertyChanged}"
-                                PlaceholderText="Category name"
-                                Margin="0,0,0,8" />
+                                Margin="0,0,0,10" />
+
+                    <ui:TextBlock Text="Description (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
                     <ui:TextBox Text="{Binding FormDescription, UpdateSourceTrigger=PropertyChanged}"
-                                PlaceholderText="Description (optional)"
-                                Margin="0,0,0,8" />
+                                Margin="0,0,0,10" />
 
                     <ui:TextBlock Text="Parent category (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
                     <ComboBox ItemsSource="{Binding ParentCategoryOptions}"

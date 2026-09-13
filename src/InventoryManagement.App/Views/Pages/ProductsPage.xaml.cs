@@ -19,6 +19,19 @@ public partial class ProductsPage : Page
         Loaded += async (_, _) => await viewModel.InitializeAsync();
     }
 
+    /// <summary>
+    /// Selects all text when a numeric field gets focus, so a field showing
+    /// its default "0" can just be typed over immediately instead of
+    /// requiring the user to manually clear it first.
+    /// </summary>
+    private void OnNumericFieldGotFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox textBox)
+        {
+            textBox.SelectAll();
+        }
+    }
+
     private async void OnExportClick(object sender, RoutedEventArgs e)
     {
         var dialog = new SaveFileDialog
