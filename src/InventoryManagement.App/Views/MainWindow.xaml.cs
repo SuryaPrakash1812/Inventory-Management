@@ -25,6 +25,17 @@ public partial class MainWindow : FluentWindow
 
         ApplicationThemeManager.Apply(this);
 
+        // ApplicationThemeManager.Apply(theme, backdrop) (called from
+        // ThemeApplier when the user toggles the theme) updates the app-wide
+        // resource dictionaries, but Mica is a native per-window DWM effect -
+        // it does not automatically refresh on windows that are already
+        // open. Without this, a theme toggle updates colors/brushes but
+        // leaves this window's actual backdrop composition stuck on the old
+        // theme, which is exactly what produced the "everything unreadable"
+        // symptom: mismatched old-backdrop/new-foreground colors.
+        ApplicationThemeManager.Changed += OnApplicationThemeChanged;
+        Closed += (_, _) => ApplicationThemeManager.Changed -= OnApplicationThemeChanged;
+
         RootNavigation.SetPageProviderService(pageProvider);
         RootNavigation.SelectionChanged += OnSelectionChanged;
 
@@ -35,6 +46,9 @@ public partial class MainWindow : FluentWindow
         // template is applied first.
         Loaded += OnLoaded;
     }
+
+    private void OnApplicationThemeChanged(ApplicationTheme currentApplicationTheme, System.Windows.Media.Color systemAccent) =>
+        ApplicationThemeManager.Apply(this);
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
