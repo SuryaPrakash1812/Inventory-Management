@@ -104,11 +104,14 @@
              scrollbar track, since the empty space beside a narrow
              left-aligned StackPanel isn't part of any hit-testable element
              by default. -->
-        <ScrollViewer Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}"
+        <ScrollViewer x:Name="EditScrollViewer"
+                      Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}"
                       VerticalScrollBarVisibility="Auto"
-                      HorizontalContentAlignment="Stretch">
+                      HorizontalContentAlignment="Stretch"
+                      Background="Transparent"
+                      PanningMode="VerticalOnly">
             <Grid Background="Transparent">
-                <StackPanel MaxWidth="900" HorizontalAlignment="Center">
+                <StackPanel MaxWidth="1200" HorizontalAlignment="Center">
                     <ui:Button Content="&#x2190; Back to Products"
                                Command="{Binding CancelEditCommand}"
                                Appearance="Transparent"

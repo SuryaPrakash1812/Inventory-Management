@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using InventoryManagement.App.ViewModels.Products;
 using Microsoft.Win32;
 
@@ -17,6 +18,26 @@ public partial class ProductsPage : Page
         DataContext = viewModel;
 
         Loaded += async (_, _) => await viewModel.InitializeAsync();
+
+        // Belt-and-braces fallback: drive the ScrollViewer directly from the
+        // mouse wheel at the page level, rather than relying solely on WPF's
+        // automatic event bubbling (which depends on every element between
+        // the cursor and the ScrollViewer being hit-testable - easy to get
+        // subtly wrong with custom styled controls). Only active while the
+        // edit form is showing, so it never interferes with the product
+        // grid's own scrolling in list view.
+        PreviewMouseWheel += OnPreviewMouseWheel;
+    }
+
+    private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (!_viewModel.IsEditing)
+        {
+            return;
+        }
+
+        EditScrollViewer.ScrollToVerticalOffset(EditScrollViewer.VerticalOffset - e.Delta);
+        e.Handled = true;
     }
 
     /// <summary>
