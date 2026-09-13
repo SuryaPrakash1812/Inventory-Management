@@ -4,45 +4,41 @@
       xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       Title="Categories">
     <Grid Margin="20">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
-            <ui:TextBox Text="{Binding SearchTerm, UpdateSourceTrigger=PropertyChanged}"
-                        PlaceholderText="Search categories by name"
-                        Width="280"
-                        Margin="0,0,8,0">
-                <ui:TextBox.InputBindings>
-                    <KeyBinding Key="Enter" Command="{Binding SearchCommand}" />
-                </ui:TextBox.InputBindings>
-            </ui:TextBox>
-            <ui:Button Content="Search" Command="{Binding SearchCommand}" Margin="0,0,16,0" />
-            <ui:Button Content="New Category" Command="{Binding StartCreateCommand}" Appearance="Primary" />
-            <ui:TextBlock Text="{Binding ErrorMessage}"
-                          Foreground="IndianRed"
-                          VerticalAlignment="Center"
-                          Margin="16,0,0,0" />
-        </StackPanel>
+        <!-- LIST VIEW -->
+        <Grid Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVisibility}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
 
-        <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="360" />
-            </Grid.ColumnDefinitions>
+            <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
+                <ui:TextBox Text="{Binding SearchTerm, UpdateSourceTrigger=PropertyChanged}"
+                            PlaceholderText="Search categories by name"
+                            Width="280"
+                            Margin="0,0,8,8">
+                    <ui:TextBox.InputBindings>
+                        <KeyBinding Key="Enter" Command="{Binding SearchCommand}" />
+                    </ui:TextBox.InputBindings>
+                </ui:TextBox>
+                <ui:Button Content="Search" Command="{Binding SearchCommand}" Margin="0,0,16,8" />
+                <ui:Button Content="New Category" Command="{Binding StartCreateCommand}" Appearance="Primary" Margin="0,0,16,8" />
+                <ui:TextBlock Text="{Binding ErrorMessage}"
+                              Foreground="IndianRed"
+                              VerticalAlignment="Center"
+                              Margin="0,0,0,8" />
+            </WrapPanel>
 
-            <DataGrid Grid.Column="0"
+            <DataGrid Grid.Row="1"
                       ItemsSource="{Binding Categories}"
                       AutoGenerateColumns="False"
                       IsReadOnly="True"
-                      CanUserAddRows="False"
-                      Margin="0,0,12,0">
+                      CanUserAddRows="False">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="180" />
-                    <DataGridTextColumn Header="Parent" Binding="{Binding ParentCategoryName}" Width="140" />
-                    <DataGridTextColumn Header="Products" Binding="{Binding ProductCount}" Width="80" />
-                    <DataGridTemplateColumn Header="" Width="150">
+                    <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="220" />
+                    <DataGridTextColumn Header="Parent" Binding="{Binding ParentCategoryName}" Width="180" />
+                    <DataGridTextColumn Header="Products" Binding="{Binding ProductCount}" Width="100" />
+                    <DataGridTemplateColumn Header="" Width="160">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
@@ -59,31 +55,42 @@
                     </DataGridTemplateColumn>
                 </DataGrid.Columns>
             </DataGrid>
-
-            <ui:Card Grid.Column="1" Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}">
-                <StackPanel>
-                    <ui:TextBlock Text="Category Details" FontTypography="BodyStrong" Margin="0,0,0,12" />
-
-                    <ui:TextBlock Text="Name (required)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
-                    <ui:TextBox Text="{Binding FormName, UpdateSourceTrigger=PropertyChanged}"
-                                Margin="0,0,0,10" />
-
-                    <ui:TextBlock Text="Description (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
-                    <ui:TextBox Text="{Binding FormDescription, UpdateSourceTrigger=PropertyChanged}"
-                                Margin="0,0,0,10" />
-
-                    <ui:TextBlock Text="Parent category (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
-                    <ComboBox ItemsSource="{Binding ParentCategoryOptions}"
-                              SelectedItem="{Binding FormParentCategory}"
-                              DisplayMemberPath="Name"
-                              Margin="0,0,0,16" />
-
-                    <StackPanel Orientation="Horizontal">
-                        <ui:Button Content="Save" Command="{Binding SaveCommand}" Appearance="Primary" Margin="0,0,8,0" />
-                        <ui:Button Content="Cancel" Command="{Binding CancelEditCommand}" />
-                    </StackPanel>
-                </StackPanel>
-            </ui:Card>
         </Grid>
+
+        <!-- EDIT VIEW: full width, its own dedicated screen. -->
+        <ScrollViewer Visibility="{Binding IsEditing, Converter={StaticResource BoolToVisibility}}"
+                      VerticalScrollBarVisibility="Auto">
+            <StackPanel MaxWidth="560" HorizontalAlignment="Left">
+                <ui:Button Content="&#x2190; Back to Categories"
+                           Command="{Binding CancelEditCommand}"
+                           Appearance="Transparent"
+                           HorizontalAlignment="Left"
+                           Margin="0,0,0,16" />
+
+                <ui:TextBlock Text="Category Details" FontTypography="TitleLarge" Margin="0,0,0,20" />
+
+                <ui:TextBlock Text="Name (required)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                <ui:TextBox Text="{Binding FormName, UpdateSourceTrigger=PropertyChanged}"
+                            Margin="0,0,0,14" />
+
+                <ui:TextBlock Text="Description (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                <ui:TextBox Text="{Binding FormDescription, UpdateSourceTrigger=PropertyChanged}"
+                            AcceptsReturn="True"
+                            TextWrapping="Wrap"
+                            Height="70"
+                            Margin="0,0,0,14" />
+
+                <ui:TextBlock Text="Parent category (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                <ComboBox ItemsSource="{Binding ParentCategoryOptions}"
+                          SelectedItem="{Binding FormParentCategory}"
+                          DisplayMemberPath="Name"
+                          Margin="0,0,0,20" />
+
+                <StackPanel Orientation="Horizontal">
+                    <ui:Button Content="Save" Command="{Binding SaveCommand}" Appearance="Primary" Margin="0,0,8,0" />
+                    <ui:Button Content="Cancel" Command="{Binding CancelEditCommand}" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
     </Grid>
 </Page>
