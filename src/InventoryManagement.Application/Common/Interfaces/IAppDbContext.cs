@@ -1,5 +1,6 @@
 using InventoryManagement.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage;
 
 namespace InventoryManagement.Application.Common.Interfaces;
@@ -34,6 +35,18 @@ public interface IAppDbContext
     DbSet<BackupRecord> BackupRecords { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Exposes EF Core's change-tracking entry for an entity - needed by
+    /// InventoryService to deliberately force a tracked Product into
+    /// EntityState.Modified (see its ApplyMovementAsync remarks on why:
+    /// forcing an early write acquires SQLite's write lock before reading
+    /// current stock, preventing a lost-update race between concurrent
+    /// stock changes). InventoryDbContext satisfies this automatically via
+    /// the DbContext.Entry method it already inherits - no implementation
+    /// needed there.
+    /// </summary>
+    EntityEntry<TEntity> Entry<TEntity>(TEntity entity) where TEntity : class;
 
     /// <summary>
     /// Starts an explicit transaction spanning more than one SaveChangesAsync

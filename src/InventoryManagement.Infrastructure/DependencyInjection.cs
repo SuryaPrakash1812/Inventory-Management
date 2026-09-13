@@ -2,6 +2,7 @@ using InventoryManagement.Application.Auth;
 using InventoryManagement.Application.Categories;
 using InventoryManagement.Application.Common.Interfaces;
 using InventoryManagement.Application.Customers;
+using InventoryManagement.Application.Inventory;
 using InventoryManagement.Application.Products;
 using InventoryManagement.Application.Settings;
 using InventoryManagement.Application.Suppliers;
@@ -12,6 +13,7 @@ using InventoryManagement.Infrastructure.Common;
 using InventoryManagement.Infrastructure.Customers;
 using InventoryManagement.Infrastructure.Data;
 using InventoryManagement.Infrastructure.Data.Interceptors;
+using InventoryManagement.Infrastructure.Inventory;
 using InventoryManagement.Infrastructure.Products;
 using InventoryManagement.Infrastructure.Settings;
 using InventoryManagement.Infrastructure.Suppliers;
@@ -70,6 +72,7 @@ public static class DependencyInjection
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<ISupplierService, SupplierService>();
         services.AddScoped<ICustomerService, CustomerService>();
+        services.AddScoped<IInventoryService, InventoryService>();
 
         return services;
     }
