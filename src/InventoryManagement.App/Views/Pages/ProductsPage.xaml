@@ -52,7 +52,14 @@
                           SelectedItem="{Binding SelectedSortColumn}"
                           MinWidth="140"
                           Margin="0,0,8,8" />
-                <CheckBox Content="Descending" IsChecked="{Binding SortDescending}" VerticalAlignment="Center" Margin="0,0,0,8" />
+                <CheckBox Content="Descending" IsChecked="{Binding SortDescending}" VerticalAlignment="Center" Margin="0,0,16,8" />
+
+                <ui:Button Content="Search" Command="{Binding SearchCommand}" Appearance="Primary" Margin="0,0,8,8" />
+                <ui:TextBlock Text="Filters apply when you click Search"
+                              FontTypography="Caption"
+                              Opacity="0.6"
+                              VerticalAlignment="Center"
+                              Margin="0,0,0,8" />
             </WrapPanel>
 
             <DataGrid Grid.Row="2"

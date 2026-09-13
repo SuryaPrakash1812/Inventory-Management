@@ -162,8 +162,12 @@ public sealed partial class ProductsViewModel : ViewModelBase
         }
     }
 
+    private int _loadRequestVersion;
+
     private async Task LoadAsync()
     {
+        var requestVersion = ++_loadRequestVersion;
+
         IsBusy = true;
         try
         {
@@ -185,6 +189,19 @@ public sealed partial class ProductsViewModel : ViewModelBase
                 PageSize = PageSize,
             });
 
+            // If another LoadAsync started (and possibly already finished)
+            // while this one was awaiting the database, this result is
+            // stale - a newer request's results (or an even-newer one still
+            // in flight) should win, not whichever call happens to finish
+            // last. This is what "filters not working right one after
+            // another" actually was: two overlapping fire-and-forget
+            // searches racing, with the slower one able to overwrite the
+            // faster/newer one's correct results.
+            if (requestVersion != _loadRequestVersion)
+            {
+                return;
+            }
+
             Products.Clear();
             foreach (var product in result.Items)
             {
@@ -199,14 +216,6 @@ public sealed partial class ProductsViewModel : ViewModelBase
             IsBusy = false;
         }
     }
-
-    partial void OnSelectedCategoryFilterChanged(CategorySummary? value) => _ = SearchAsync();
-
-    partial void OnSelectedActiveFilterChanged(string value) => _ = SearchAsync();
-
-    partial void OnSelectedSortColumnChanged(ProductSortColumn value) => _ = SearchAsync();
-
-    partial void OnSortDescendingChanged(bool value) => _ = SearchAsync();
 
     [RelayCommand]
     private void StartCreate()
