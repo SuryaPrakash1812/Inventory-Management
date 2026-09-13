@@ -1,16 +1,20 @@
 using InventoryManagement.Application.Auth;
 using InventoryManagement.Application.Categories;
 using InventoryManagement.Application.Common.Interfaces;
+using InventoryManagement.Application.Customers;
 using InventoryManagement.Application.Products;
 using InventoryManagement.Application.Settings;
+using InventoryManagement.Application.Suppliers;
 using InventoryManagement.Application.Users;
 using InventoryManagement.Infrastructure.Auth;
 using InventoryManagement.Infrastructure.Categories;
 using InventoryManagement.Infrastructure.Common;
+using InventoryManagement.Infrastructure.Customers;
 using InventoryManagement.Infrastructure.Data;
 using InventoryManagement.Infrastructure.Data.Interceptors;
 using InventoryManagement.Infrastructure.Products;
 using InventoryManagement.Infrastructure.Settings;
+using InventoryManagement.Infrastructure.Suppliers;
 using InventoryManagement.Infrastructure.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -64,6 +68,8 @@ public static class DependencyInjection
 
         services.AddScoped<IProductService, ProductService>();
         services.AddScoped<ICategoryService, CategoryService>();
+        services.AddScoped<ISupplierService, SupplierService>();
+        services.AddScoped<ICustomerService, CustomerService>();
 
         return services;
     }

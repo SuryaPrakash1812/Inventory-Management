@@ -16,6 +16,8 @@ public class CustomerConfiguration : IEntityTypeConfiguration<Customer>
         builder.Property(c => c.Email).HasMaxLength(200);
         builder.Property(c => c.Phone).HasMaxLength(50);
         builder.Property(c => c.Address).HasMaxLength(500);
+        builder.Property(c => c.TaxId).HasMaxLength(50);
+        builder.Property(c => c.Notes).HasMaxLength(2000);
 
         builder.HasIndex(c => c.Name)
             .HasDatabaseName("IX_Customers_Name");

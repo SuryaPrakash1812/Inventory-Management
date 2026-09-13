@@ -16,6 +16,8 @@ public class SupplierConfiguration : IEntityTypeConfiguration<Supplier>
         builder.Property(s => s.Email).HasMaxLength(200);
         builder.Property(s => s.Phone).HasMaxLength(50);
         builder.Property(s => s.Address).HasMaxLength(500);
+        builder.Property(s => s.TaxId).HasMaxLength(50);
+        builder.Property(s => s.Notes).HasMaxLength(2000);
 
         builder.HasIndex(s => s.Name)
             .HasDatabaseName("IX_Suppliers_Name");
