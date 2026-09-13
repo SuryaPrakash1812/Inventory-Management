@@ -142,6 +142,19 @@ public sealed partial class ProductsViewModel : ViewModelBase
         await LoadAsync();
     }
 
+    [RelayCommand]
+    private async Task ClearFiltersAsync()
+    {
+        SearchTerm = string.Empty;
+        SelectedCategoryFilter = null;
+        SelectedActiveFilter = "All";
+        SelectedSortColumn = ProductSortColumn.Name;
+        SortDescending = false;
+        PageNumber = 1;
+
+        await LoadAsync();
+    }
+
     [RelayCommand(CanExecute = nameof(CanGoToPreviousPage))]
     private async Task PreviousPageAsync()
     {
