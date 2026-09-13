@@ -18,22 +18,22 @@
             </Grid.RowDefinitions>
 
             <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
-                <ui:TextBox x:Name="SearchBox"
-                            Text="{Binding SearchTerm, UpdateSourceTrigger=PropertyChanged}"
-                            PlaceholderText="Search by SKU, barcode, or name"
-                            Width="300"
-                            Margin="0,0,8,8">
-                    <ui:TextBox.InputBindings>
-                        <KeyBinding Key="Enter" Command="{Binding SearchCommand}" />
-                    </ui:TextBox.InputBindings>
-                </ui:TextBox>
-                <ui:Button Content="Search" Command="{Binding SearchCommand}" Margin="0,0,16,8" />
                 <ui:Button Content="New Product" Command="{Binding StartCreateCommand}" Appearance="Primary" Margin="0,0,8,8" />
                 <ui:Button Content="Export" Click="OnExportClick" Margin="0,0,8,8" />
                 <ui:Button Content="Import" Click="OnImportClick" Margin="0,0,0,8" />
             </WrapPanel>
 
             <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
+                <ui:TextBox x:Name="SearchBox"
+                            Text="{Binding SearchTerm, UpdateSourceTrigger=PropertyChanged}"
+                            PlaceholderText="Search by SKU, barcode, or name"
+                            Width="260"
+                            Margin="0,0,16,8">
+                    <ui:TextBox.InputBindings>
+                        <KeyBinding Key="Enter" Command="{Binding SearchCommand}" />
+                    </ui:TextBox.InputBindings>
+                </ui:TextBox>
+
                 <ui:TextBlock Text="Category:" VerticalAlignment="Center" Margin="0,0,8,8" />
                 <ComboBox ItemsSource="{Binding Categories}"
                           SelectedItem="{Binding SelectedCategoryFilter}"
