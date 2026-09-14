@@ -143,6 +143,7 @@
                                 <ui:TextBlock Text="Payment status" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
                                 <ComboBox ItemsSource="{Binding PaymentStatusOptions}"
                                           SelectedItem="{Binding FormPaymentStatus}"
+                                          IsEnabled="{Binding IsNotBusy}"
                                           MaxWidth="220"
                                           HorizontalAlignment="Left"
                                           Margin="0,0,0,4" />
@@ -235,19 +236,23 @@
                                 <ui:Button Content="Save Draft"
                                            Command="{Binding SaveDraftCommand}"
                                            Appearance="Primary"
+                                           IsEnabled="{Binding IsNotBusy}"
                                            Visibility="{Binding CanEditFields, Converter={StaticResource BoolToVisibility}}"
                                            Margin="0,0,8,0" />
                                 <ui:Button Content="Confirm (updates stock)"
                                            Command="{Binding ConfirmCommand}"
                                            Appearance="Primary"
+                                           IsEnabled="{Binding IsNotBusy}"
                                            Visibility="{Binding CanConfirm, Converter={StaticResource BoolToVisibility}}"
                                            Margin="0,0,8,0" />
                                 <ui:Button Content="Cancel Purchase"
                                            Command="{Binding CancelPurchaseCommand}"
+                                           IsEnabled="{Binding IsNotBusy}"
                                            Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisibility}}"
                                            Margin="0,0,8,0" />
                                 <ui:Button Content="Delete Draft"
                                            Command="{Binding DeleteDraftCommand}"
+                                           IsEnabled="{Binding IsNotBusy}"
                                            Visibility="{Binding CanDelete, Converter={StaticResource BoolToVisibility}}"
                                            Margin="0,0,8,0" />
                             </StackPanel>

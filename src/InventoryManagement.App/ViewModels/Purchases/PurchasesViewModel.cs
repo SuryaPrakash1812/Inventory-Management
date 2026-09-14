@@ -62,6 +62,18 @@ public sealed partial class PurchasesViewModel : ViewModelBase
 
     public bool CanGoToNextPage => PageNumber < TotalPages;
 
+    /// <summary>
+    /// Bound to every action button's IsEnabled (Save/Confirm/Cancel/Delete).
+    /// Critically, this also covers the payment-status auto-save: without
+    /// it, nothing stopped a user from clicking Save Draft WHILE that
+    /// fire-and-forget save was still in flight, and two overlapping
+    /// operations sharing the same DbContext at once is a real source of
+    /// corruption (EF Core's DbContext is not safe for concurrent use,
+    /// even within one session) - this is what actually caused the
+    /// DbUpdateConcurrencyException, not stale tracking as first suspected.
+    /// </summary>
+    public bool IsNotBusy => !IsBusy;
+
     private int _loadRequestVersion;
 
     // --- Detail/edit view state ---
@@ -193,6 +205,7 @@ public sealed partial class PurchasesViewModel : ViewModelBase
         var requestVersion = ++_loadRequestVersion;
 
         IsBusy = true;
+        OnPropertyChanged(nameof(IsNotBusy));
         try
         {
             PurchaseStatus? status = SelectedStatusFilter switch
@@ -231,6 +244,7 @@ public sealed partial class PurchasesViewModel : ViewModelBase
         finally
         {
             IsBusy = false;
+            OnPropertyChanged(nameof(IsNotBusy));
         }
     }
 
@@ -367,6 +381,17 @@ public sealed partial class PurchasesViewModel : ViewModelBase
     [RelayCommand]
     private async Task SaveDraftAsync()
     {
+        // Guards against Ctrl+S (or any other invocation path) firing while
+        // another operation - notably the fire-and-forget payment-status
+        // auto-save - is still running. IsEnabled on the button covers
+        // mouse clicks, but a KeyBinding invokes the command directly and
+        // would bypass that, so the guard belongs here in the method body
+        // too, not just in the UI.
+        if (IsBusy)
+        {
+            return;
+        }
+
         ErrorMessage = null;
 
         if (FormSupplier is null)
@@ -382,6 +407,7 @@ public sealed partial class PurchasesViewModel : ViewModelBase
         }
 
         IsBusy = true;
+        OnPropertyChanged(nameof(IsNotBusy));
         try
         {
             var itemRequests = LineItems
@@ -411,19 +437,21 @@ public sealed partial class PurchasesViewModel : ViewModelBase
         finally
         {
             IsBusy = false;
+            OnPropertyChanged(nameof(IsNotBusy));
         }
     }
 
     [RelayCommand]
     private async Task ConfirmAsync()
     {
-        if (EditingPurchaseId is not { } id)
+        if (EditingPurchaseId is not { } id || IsBusy)
         {
             return;
         }
 
         ErrorMessage = null;
         IsBusy = true;
+        OnPropertyChanged(nameof(IsNotBusy));
         try
         {
             var result = await _purchaseService.ConfirmPurchaseAsync(id);
@@ -441,19 +469,21 @@ public sealed partial class PurchasesViewModel : ViewModelBase
         finally
         {
             IsBusy = false;
+            OnPropertyChanged(nameof(IsNotBusy));
         }
     }
 
     [RelayCommand]
     private async Task CancelPurchaseAsync()
     {
-        if (EditingPurchaseId is not { } id)
+        if (EditingPurchaseId is not { } id || IsBusy)
         {
             return;
         }
 
         ErrorMessage = null;
         IsBusy = true;
+        OnPropertyChanged(nameof(IsNotBusy));
         try
         {
             var result = await _purchaseService.CancelPurchaseAsync(id);
@@ -471,29 +501,40 @@ public sealed partial class PurchasesViewModel : ViewModelBase
         finally
         {
             IsBusy = false;
+            OnPropertyChanged(nameof(IsNotBusy));
         }
     }
 
     [RelayCommand]
     private async Task DeleteDraftAsync()
     {
-        if (EditingPurchaseId is not { } id)
+        if (EditingPurchaseId is not { } id || IsBusy)
         {
             return;
         }
 
         ErrorMessage = null;
-        var result = await _purchaseService.DeleteDraftAsync(id);
-        if (result.IsFailure)
+        IsBusy = true;
+        OnPropertyChanged(nameof(IsNotBusy));
+        try
         {
-            ErrorMessage = result.Error;
-            return;
-        }
+            var result = await _purchaseService.DeleteDraftAsync(id);
+            if (result.IsFailure)
+            {
+                ErrorMessage = result.Error;
+                return;
+            }
 
-        StatusMessage = "Draft purchase deleted.";
-        IsViewingDetail = false;
-        OnPropertyChanged(nameof(IsShowingList));
-        await LoadAsync();
+            StatusMessage = "Draft purchase deleted.";
+            IsViewingDetail = false;
+            OnPropertyChanged(nameof(IsShowingList));
+            await LoadAsync();
+        }
+        finally
+        {
+            IsBusy = false;
+            OnPropertyChanged(nameof(IsNotBusy));
+        }
     }
 
     partial void OnFormPaymentStatusChanged(PurchasePaymentStatus value)
@@ -508,14 +549,35 @@ public sealed partial class PurchasesViewModel : ViewModelBase
 
     private async Task PersistPaymentStatusAsync(Guid id, PurchasePaymentStatus value)
     {
-        var result = await _purchaseService.SetPaymentStatusAsync(id, value);
-        if (result.IsFailure)
+        if (IsBusy)
         {
-            ErrorMessage = result.Error;
+            ErrorMessage = "Another action is still in progress - please try changing the payment status again in a moment.";
+            return;
         }
-        else
+
+        // Still fire-and-forget from OnFormPaymentStatusChanged's point of
+        // view (that hook can't be async), but IsBusy now makes every other
+        // action button unavailable for the duration, so nothing can start
+        // a second operation against the shared DbContext while this one is
+        // still running - see IsNotBusy remarks for why that matters.
+        IsBusy = true;
+        OnPropertyChanged(nameof(IsNotBusy));
+        try
         {
-            StatusMessage = $"Payment status set to {value}.";
+            var result = await _purchaseService.SetPaymentStatusAsync(id, value);
+            if (result.IsFailure)
+            {
+                ErrorMessage = result.Error;
+            }
+            else
+            {
+                StatusMessage = $"Payment status set to {value}.";
+            }
+        }
+        finally
+        {
+            IsBusy = false;
+            OnPropertyChanged(nameof(IsNotBusy));
         }
     }
 
