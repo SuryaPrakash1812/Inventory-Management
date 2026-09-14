@@ -267,6 +267,29 @@ public class PurchaseServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task GetPurchasesAsync_FiltersByDateRange_DoesNotThrow()
+    {
+        // Regression test: SQLite's EF Core provider cannot translate a
+        // WHERE comparison (>=, <=) on a DateTimeOffset column - this used
+        // to throw InvalidOperationException the instant a From or To date
+        // filter was applied.
+        await _sut.SaveDraftAsync(MakeDraftRequest());
+
+        var today = DateTimeOffset.UtcNow.Date;
+
+        var withFromDate = await _sut.GetPurchasesAsync(
+            new PurchaseQueryParameters { FromDate = today.AddDays(-1) });
+        var withToDate = await _sut.GetPurchasesAsync(
+            new PurchaseQueryParameters { ToDate = today.AddDays(1) });
+        var excludedByFromDate = await _sut.GetPurchasesAsync(
+            new PurchaseQueryParameters { FromDate = today.AddDays(1) });
+
+        Assert.Single(withFromDate.Items);
+        Assert.Single(withToDate.Items);
+        Assert.Empty(excludedByFromDate.Items);
+    }
+
+    [Fact]
     public async Task GetPurchasesAsync_FiltersBySupplierAndStatus()
     {
         var otherSupplier = new Supplier { Name = "Other Supplier" };

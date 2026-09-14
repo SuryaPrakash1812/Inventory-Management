@@ -33,23 +33,40 @@ public sealed class PurchaseService : IPurchaseService
     {
         var filtered = BuildFilteredQuery(query);
 
-        var totalCount = await filtered.CountAsync(cancellationToken);
-
         var pageNumber = Math.Max(1, query.PageNumber);
         var pageSize = query.PageSize <= 0 ? 25 : query.PageSize;
 
         // SQLite cannot translate ORDER BY on a DateTimeOffset column (see
         // ProductService.ApplySort remarks for the same limitation
-        // elsewhere in this codebase) - sorted/paginated in memory instead.
+        // elsewhere in this codebase), and it turns out it cannot translate
+        // WHERE comparisons (>=, <=) on one either - both PurchaseDate
+        // sorting AND the From/To date filter below have to happen in
+        // memory rather than as part of the SQL query. Everything else
+        // (search term, supplier, status) is still filtered server-side in
+        // BuildFilteredQuery.
         var all = await filtered
             .Select(p => new PurchaseSummary(
                 p.Id, p.PurchaseNumber, p.SupplierInvoiceNumber, p.SupplierId, p.Supplier.Name,
                 p.PurchaseDate, p.Status, p.PaymentStatus, p.TotalAmount))
             .ToListAsync(cancellationToken);
 
+        IEnumerable<PurchaseSummary> dateFiltered = all;
+        if (query.FromDate is { } fromDate)
+        {
+            dateFiltered = dateFiltered.Where(p => p.PurchaseDate >= fromDate);
+        }
+
+        if (query.ToDate is { } toDate)
+        {
+            dateFiltered = dateFiltered.Where(p => p.PurchaseDate <= toDate);
+        }
+
+        var dateFilteredList = dateFiltered.ToList();
+        var totalCount = dateFilteredList.Count;
+
         var sorted = query.SortDescending
-            ? all.OrderByDescending(p => p.PurchaseDate)
-            : all.OrderBy(p => p.PurchaseDate);
+            ? dateFilteredList.OrderByDescending(p => p.PurchaseDate)
+            : dateFilteredList.OrderBy(p => p.PurchaseDate);
 
         var items = sorted.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
 
@@ -346,15 +363,10 @@ public sealed class PurchaseService : IPurchaseService
             purchases = purchases.Where(p => p.Status == status);
         }
 
-        if (query.FromDate is { } fromDate)
-        {
-            purchases = purchases.Where(p => p.PurchaseDate >= fromDate);
-        }
-
-        if (query.ToDate is { } toDate)
-        {
-            purchases = purchases.Where(p => p.PurchaseDate <= toDate);
-        }
+        // FromDate/ToDate deliberately NOT applied here - see the
+        // GetPurchasesAsync remarks on why they're filtered in memory
+        // instead. SQLite cannot translate a >= / <= comparison on a
+        // DateTimeOffset column into SQL.
 
         return purchases;
     }
