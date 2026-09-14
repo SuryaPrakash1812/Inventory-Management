@@ -141,15 +141,16 @@
                             <StackPanel Visibility="{Binding IsNewPurchase, Converter={StaticResource InverseBoolToVisibility}}"
                                         Margin="0,0,0,16">
                                 <ui:TextBlock Text="Payment status" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
-                                <ComboBox ItemsSource="{Binding PaymentStatusOptions}"
-                                          SelectedItem="{Binding FormPaymentStatus}"
-                                          IsEnabled="{Binding IsNotBusy}"
-                                          MaxWidth="220"
-                                          HorizontalAlignment="Left"
-                                          Margin="0,0,0,4" />
-                                <ui:TextBlock Text="Saves immediately when changed - no separate save needed for this field."
-                                              FontTypography="Caption"
-                                              Opacity="0.5" />
+                                <StackPanel Orientation="Horizontal">
+                                    <ComboBox ItemsSource="{Binding PaymentStatusOptions}"
+                                              SelectedItem="{Binding FormPaymentStatus}"
+                                              IsEnabled="{Binding IsNotBusy}"
+                                              MinWidth="180"
+                                              Margin="0,0,8,0" />
+                                    <ui:Button Content="Save"
+                                               Command="{Binding SavePaymentStatusCommand}"
+                                               IsEnabled="{Binding IsNotBusy}" />
+                                </StackPanel>
                             </StackPanel>
 
                             <ui:TextBlock Text="Other fields are locked once a purchase is Confirmed or Cancelled - only payment status can still be changed."

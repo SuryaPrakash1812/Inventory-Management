@@ -63,14 +63,17 @@ public sealed partial class PurchasesViewModel : ViewModelBase
     public bool CanGoToNextPage => PageNumber < TotalPages;
 
     /// <summary>
-    /// Bound to every action button's IsEnabled (Save/Confirm/Cancel/Delete).
-    /// Critically, this also covers the payment-status auto-save: without
-    /// it, nothing stopped a user from clicking Save Draft WHILE that
-    /// fire-and-forget save was still in flight, and two overlapping
-    /// operations sharing the same DbContext at once is a real source of
-    /// corruption (EF Core's DbContext is not safe for concurrent use,
-    /// even within one session) - this is what actually caused the
-    /// DbUpdateConcurrencyException, not stale tracking as first suspected.
+    /// Bound to every action button's IsEnabled (Save/Confirm/Cancel/Delete/
+    /// Save Payment Status), so none of them can run while another is still
+    /// in flight. Two overlapping writes sharing the same DbContext at once
+    /// is a real source of corruption - EF Core's DbContext is not safe for
+    /// concurrent use, even within one session - and was previously the
+    /// actual cause of a DbUpdateConcurrencyException here (payment status
+    /// used to auto-save via a fire-and-forget call, which a user could
+    /// easily race against by clicking Save Draft right after; that
+    /// auto-save is gone now in favor of SavePaymentStatusAsync being an
+    /// explicit action, but this guard remains as defense against any other
+    /// two actions overlapping).
     /// </summary>
     public bool IsNotBusy => !IsBusy;
 
@@ -281,12 +284,11 @@ public sealed partial class PurchasesViewModel : ViewModelBase
             return;
         }
 
-        // EditingPurchaseId is deliberately set LAST, after every other field
-        // (including FormPaymentStatus). OnFormPaymentStatusChanged only
-        // acts when EditingPurchaseId is already set, specifically so that
-        // populating these fields while loading a record never fires a
-        // spurious "save payment status" call - only a genuine, later,
-        // user-driven change to the dropdown should do that.
+        // EditingPurchaseId is set LAST, after every other field, simply to
+        // keep this method's field-population order consistent with
+        // StartCreate's. Payment status is no longer auto-saved on change
+        // (see SavePaymentStatusAsync), so there's no longer a risk of a
+        // spurious save from populating these fields while loading.
         EditingPurchaseId = null;
         CurrentStatus = detail.Status;
         PurchaseNumberDisplay = detail.PurchaseNumber;
@@ -537,41 +539,37 @@ public sealed partial class PurchasesViewModel : ViewModelBase
         }
     }
 
-    partial void OnFormPaymentStatusChanged(PurchasePaymentStatus value)
+    /// <summary>
+    /// Deliberately NOT auto-saved on dropdown change. That used to be a
+    /// fire-and-forget call from a property-changed hook (which can't be
+    /// async), and nothing stopped a user from clicking another action
+    /// button - or pressing Ctrl+S - while that save was still in flight.
+    /// Two overlapping writes sharing the same DbContext at once produced a
+    /// DbUpdateConcurrencyException that looked like a data conflict but
+    /// wasn't. Requiring an explicit click removes the race at its root
+    /// instead of just guarding around it.
+    /// </summary>
+    [RelayCommand]
+    private async Task SavePaymentStatusAsync()
     {
-        if (EditingPurchaseId is not { } id)
+        if (EditingPurchaseId is not { } id || IsBusy)
         {
             return;
         }
 
-        _ = PersistPaymentStatusAsync(id, value);
-    }
-
-    private async Task PersistPaymentStatusAsync(Guid id, PurchasePaymentStatus value)
-    {
-        if (IsBusy)
-        {
-            ErrorMessage = "Another action is still in progress - please try changing the payment status again in a moment.";
-            return;
-        }
-
-        // Still fire-and-forget from OnFormPaymentStatusChanged's point of
-        // view (that hook can't be async), but IsBusy now makes every other
-        // action button unavailable for the duration, so nothing can start
-        // a second operation against the shared DbContext while this one is
-        // still running - see IsNotBusy remarks for why that matters.
+        ErrorMessage = null;
         IsBusy = true;
         OnPropertyChanged(nameof(IsNotBusy));
         try
         {
-            var result = await _purchaseService.SetPaymentStatusAsync(id, value);
+            var result = await _purchaseService.SetPaymentStatusAsync(id, FormPaymentStatus);
             if (result.IsFailure)
             {
                 ErrorMessage = result.Error;
             }
             else
             {
-                StatusMessage = $"Payment status set to {value}.";
+                StatusMessage = $"Payment status set to {FormPaymentStatus}.";
             }
         }
         finally
