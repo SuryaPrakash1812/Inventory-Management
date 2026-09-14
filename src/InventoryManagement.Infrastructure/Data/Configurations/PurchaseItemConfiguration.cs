@@ -10,6 +10,9 @@ public class PurchaseItemConfiguration : IEntityTypeConfiguration<PurchaseItem>
     {
         builder.Property(i => i.Quantity).HasPrecision(18, 4);
         builder.Property(i => i.UnitCost).HasPrecision(18, 4);
+        builder.Property(i => i.DiscountAmount).HasPrecision(18, 4);
+        builder.Property(i => i.TaxPercentage).HasPrecision(5, 2);
+        builder.Property(i => i.TaxAmount).HasPrecision(18, 4);
         builder.Property(i => i.LineTotal).HasPrecision(18, 4);
 
         builder.HasOne(i => i.Purchase)

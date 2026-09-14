@@ -3,6 +3,7 @@ using InventoryManagement.App.ViewModels.Auth;
 using InventoryManagement.App.ViewModels.Categories;
 using InventoryManagement.App.ViewModels.Customers;
 using InventoryManagement.App.ViewModels.Products;
+using InventoryManagement.App.ViewModels.Purchases;
 using InventoryManagement.App.ViewModels.Suppliers;
 using InventoryManagement.App.ViewModels.Users;
 using InventoryManagement.App.Views;
@@ -53,6 +54,7 @@ public static class DependencyInjection
         services.AddTransient<CustomersPage>();
         services.AddTransient<CustomersViewModel>();
         services.AddTransient<PurchasesPage>();
+        services.AddTransient<PurchasesViewModel>();
         services.AddTransient<SalesPage>();
         services.AddTransient<InventoryPage>();
         services.AddTransient<StockAdjustmentsPage>();

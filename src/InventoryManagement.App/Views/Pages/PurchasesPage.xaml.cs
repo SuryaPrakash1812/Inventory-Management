@@ -1,17 +1,38 @@
 using System.Windows.Controls;
-using InventoryManagement.App.ViewModels;
+using System.Windows.Input;
+using InventoryManagement.App.ViewModels.Purchases;
 
 namespace InventoryManagement.App.Views.Pages;
 
-/// <summary>
-/// Placeholder page for Purchases. Purchase entry and stock-in logic arrive in Stage 5 (Purchases).
-/// </summary>
 public partial class PurchasesPage : Page
 {
-    public PurchasesPage()
+    private readonly PurchasesViewModel _viewModel;
+
+    public PurchasesPage(PurchasesViewModel viewModel)
     {
+        _viewModel = viewModel;
         InitializeComponent();
 
-        DataContext = new PlaceholderViewModel("Purchases", "Purchase entry and stock-in logic arrive in Stage 5 (Purchases).");
+        DataContext = viewModel;
+
+        Loaded += async (_, _) => await viewModel.InitializeAsync();
+
+        PreviewMouseWheel += OnPreviewMouseWheel;
+
+        // Ctrl+S saves the current draft - useful when entering a long list
+        // of items and wanting to save progress without reaching for the mouse.
+        InputBindings.Add(new KeyBinding(
+            _viewModel.SaveDraftCommand, new KeyGesture(Key.S, ModifierKeys.Control)));
+    }
+
+    private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (!_viewModel.IsViewingDetail)
+        {
+            return;
+        }
+
+        DetailScrollViewer.ScrollToVerticalOffset(DetailScrollViewer.VerticalOffset - e.Delta);
+        e.Handled = true;
     }
 }

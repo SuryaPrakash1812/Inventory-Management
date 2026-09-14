@@ -1,0 +1,434 @@
+using InventoryManagement.Application.Auth;
+using InventoryManagement.Application.Common.Interfaces;
+using InventoryManagement.Application.Inventory;
+using InventoryManagement.Application.Purchases;
+using InventoryManagement.Core.Common;
+using InventoryManagement.Domain.Entities;
+using InventoryManagement.Domain.Enums;
+using Microsoft.EntityFrameworkCore;
+
+namespace InventoryManagement.Infrastructure.Purchases;
+
+public sealed class PurchaseService : IPurchaseService
+{
+    private readonly IAppDbContext _context;
+    private readonly IInventoryService _inventoryService;
+    private readonly IAuditLogger _auditLogger;
+    private readonly IDateTimeProvider _dateTimeProvider;
+
+    public PurchaseService(
+        IAppDbContext context,
+        IInventoryService inventoryService,
+        IAuditLogger auditLogger,
+        IDateTimeProvider dateTimeProvider)
+    {
+        _context = context;
+        _inventoryService = inventoryService;
+        _auditLogger = auditLogger;
+        _dateTimeProvider = dateTimeProvider;
+    }
+
+    public async Task<PagedResult<PurchaseSummary>> GetPurchasesAsync(
+        PurchaseQueryParameters query, CancellationToken cancellationToken = default)
+    {
+        var filtered = BuildFilteredQuery(query);
+
+        var totalCount = await filtered.CountAsync(cancellationToken);
+
+        var pageNumber = Math.Max(1, query.PageNumber);
+        var pageSize = query.PageSize <= 0 ? 25 : query.PageSize;
+
+        // SQLite cannot translate ORDER BY on a DateTimeOffset column (see
+        // ProductService.ApplySort remarks for the same limitation
+        // elsewhere in this codebase) - sorted/paginated in memory instead.
+        var all = await filtered
+            .Select(p => new PurchaseSummary(
+                p.Id, p.PurchaseNumber, p.SupplierInvoiceNumber, p.SupplierId, p.Supplier.Name,
+                p.PurchaseDate, p.Status, p.PaymentStatus, p.TotalAmount))
+            .ToListAsync(cancellationToken);
+
+        var sorted = query.SortDescending
+            ? all.OrderByDescending(p => p.PurchaseDate)
+            : all.OrderBy(p => p.PurchaseDate);
+
+        var items = sorted.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
+
+        return new PagedResult<PurchaseSummary>(items, totalCount, pageNumber, pageSize);
+    }
+
+    public async Task<PurchaseDetail?> GetPurchaseByIdAsync(
+        Guid purchaseId, CancellationToken cancellationToken = default)
+    {
+        var purchase = await _context.Purchases
+            .Include(p => p.Supplier)
+            .Include(p => p.Items)
+            .ThenInclude(i => i.Product)
+            .SingleOrDefaultAsync(p => p.Id == purchaseId, cancellationToken);
+
+        return purchase is null ? null : ToDetail(purchase);
+    }
+
+    public async Task<Result<PurchaseDetail>> SaveDraftAsync(
+        SaveDraftPurchaseRequest request, CancellationToken cancellationToken = default)
+    {
+        var validationError = await ValidateAsync(request.SupplierId, request.Items, cancellationToken);
+        if (validationError is not null)
+        {
+            return Result.Failure<PurchaseDetail>(validationError);
+        }
+
+        Purchase purchase;
+        AuditAction auditAction;
+
+        if (request.PurchaseId is { } existingId)
+        {
+            var existing = await _context.Purchases
+                .Include(p => p.Items)
+                .SingleOrDefaultAsync(p => p.Id == existingId, cancellationToken);
+
+            if (existing is null)
+            {
+                return Result.Failure<PurchaseDetail>("Purchase not found.");
+            }
+
+            if (existing.Status != PurchaseStatus.Draft)
+            {
+                return Result.Failure<PurchaseDetail>(
+                    $"Purchase is {existing.Status} and can no longer be edited.");
+            }
+
+            existing.Items.Clear();
+            purchase = existing;
+            auditAction = AuditAction.Updated;
+        }
+        else
+        {
+            purchase = new Purchase
+            {
+                PurchaseNumber = await GenerateNextPurchaseNumberAsync(cancellationToken),
+                Status = PurchaseStatus.Draft,
+                PaymentStatus = PurchasePaymentStatus.Unpaid,
+            };
+            _context.Purchases.Add(purchase);
+            auditAction = AuditAction.Created;
+        }
+
+        purchase.SupplierId = request.SupplierId;
+        purchase.SupplierInvoiceNumber = request.SupplierInvoiceNumber;
+        purchase.PurchaseDate = request.PurchaseDate;
+        purchase.Notes = request.Notes;
+
+        decimal subtotal = 0, discountTotal = 0, taxTotal = 0;
+
+        foreach (var itemRequest in request.Items)
+        {
+            var lineSubtotal = itemRequest.Quantity * itemRequest.UnitCost;
+            var taxableAmount = lineSubtotal - itemRequest.DiscountAmount;
+            var taxAmount = taxableAmount * itemRequest.TaxPercentage / 100m;
+            var lineTotal = taxableAmount + taxAmount;
+
+            purchase.Items.Add(new PurchaseItem
+            {
+                ProductId = itemRequest.ProductId,
+                Quantity = itemRequest.Quantity,
+                UnitCost = itemRequest.UnitCost,
+                DiscountAmount = itemRequest.DiscountAmount,
+                TaxPercentage = itemRequest.TaxPercentage,
+                TaxAmount = taxAmount,
+                LineTotal = lineTotal,
+            });
+
+            subtotal += lineSubtotal;
+            discountTotal += itemRequest.DiscountAmount;
+            taxTotal += taxAmount;
+        }
+
+        purchase.Subtotal = subtotal;
+        purchase.DiscountAmount = discountTotal;
+        purchase.TaxAmount = taxTotal;
+        purchase.TotalAmount = subtotal - discountTotal + taxTotal;
+
+        await _auditLogger.LogAsync(
+            auditAction, nameof(Purchase), purchase.Id,
+            $"Purchase '{purchase.PurchaseNumber}' draft saved with {request.Items.Count} item(s).", cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return Result.Success(await ToDetailByIdAsync(purchase.Id, cancellationToken));
+    }
+
+    public async Task<Result> DeleteDraftAsync(Guid purchaseId, CancellationToken cancellationToken = default)
+    {
+        var purchase = await _context.Purchases.SingleOrDefaultAsync(p => p.Id == purchaseId, cancellationToken);
+        if (purchase is null)
+        {
+            return Result.Failure("Purchase not found.");
+        }
+
+        if (purchase.Status != PurchaseStatus.Draft)
+        {
+            return Result.Failure($"Only a Draft purchase can be deleted - this purchase is {purchase.Status}.");
+        }
+
+        purchase.MarkDeleted(_dateTimeProvider.UtcNow, null);
+
+        await _auditLogger.LogAsync(
+            AuditAction.Deleted, nameof(Purchase), purchase.Id,
+            $"Draft purchase '{purchase.PurchaseNumber}' deleted.", cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return Result.Success();
+    }
+
+    public async Task<Result<PurchaseDetail>> ConfirmPurchaseAsync(
+        Guid purchaseId, CancellationToken cancellationToken = default)
+    {
+        var purchase = await _context.Purchases
+            .Include(p => p.Items)
+            .SingleOrDefaultAsync(p => p.Id == purchaseId, cancellationToken);
+
+        if (purchase is null)
+        {
+            return Result.Failure<PurchaseDetail>("Purchase not found.");
+        }
+
+        // This check is what makes confirming idempotent: once Status is no
+        // longer Draft, a second call always fails here before touching any
+        // stock, so the same purchase can never have its stock added twice.
+        if (purchase.Status != PurchaseStatus.Draft)
+        {
+            return Result.Failure<PurchaseDetail>(
+                $"Purchase is already {purchase.Status} and cannot be confirmed again.");
+        }
+
+        if (purchase.Items.Count == 0)
+        {
+            return Result.Failure<PurchaseDetail>("Cannot confirm a purchase with no items.");
+        }
+
+        foreach (var item in purchase.Items)
+        {
+            var addResult = await _inventoryService.AddStockAsync(new AddStockRequest(
+                item.ProductId,
+                item.Quantity,
+                StockMovementType.PurchaseReceipt,
+                StockReferenceType.Purchase,
+                purchase.Id,
+                $"Purchase {purchase.PurchaseNumber} confirmed"), cancellationToken);
+
+            if (addResult.IsFailure)
+            {
+                return Result.Failure<PurchaseDetail>(
+                    $"Failed to update stock for one of the items: {addResult.Error}");
+            }
+        }
+
+        purchase.Status = PurchaseStatus.Confirmed;
+
+        await _auditLogger.LogAsync(
+            AuditAction.Updated, nameof(Purchase), purchase.Id,
+            $"Purchase '{purchase.PurchaseNumber}' confirmed - stock updated for {purchase.Items.Count} item(s).",
+            cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return Result.Success(await ToDetailByIdAsync(purchase.Id, cancellationToken));
+    }
+
+    public async Task<Result<PurchaseDetail>> CancelPurchaseAsync(
+        Guid purchaseId, CancellationToken cancellationToken = default)
+    {
+        var purchase = await _context.Purchases
+            .Include(p => p.Items)
+            .SingleOrDefaultAsync(p => p.Id == purchaseId, cancellationToken);
+
+        if (purchase is null)
+        {
+            return Result.Failure<PurchaseDetail>("Purchase not found.");
+        }
+
+        // Same idempotency guard as Confirm - a purchase can only ever be
+        // cancelled once.
+        if (purchase.Status == PurchaseStatus.Cancelled)
+        {
+            return Result.Failure<PurchaseDetail>("Purchase is already cancelled.");
+        }
+
+        if (purchase.Status == PurchaseStatus.Confirmed)
+        {
+            // Safe business rule: never partially reverse or force stock
+            // negative. Every line must have enough remaining stock to fully
+            // reverse before ANY of them are touched.
+            foreach (var item in purchase.Items)
+            {
+                var currentStock = await _inventoryService.GetCurrentStockAsync(item.ProductId, cancellationToken);
+                if (currentStock < item.Quantity)
+                {
+                    return Result.Failure<PurchaseDetail>(
+                        "Cannot cancel: some of this purchase's stock has already been used elsewhere "
+                            + $"(only {currentStock} of {item.Quantity} remaining for one of the items). "
+                            + "Reduce usage of the affected product(s) before cancelling.");
+                }
+            }
+
+            foreach (var item in purchase.Items)
+            {
+                var removeResult = await _inventoryService.RemoveStockAsync(new RemoveStockRequest(
+                    item.ProductId,
+                    item.Quantity,
+                    StockMovementType.PurchaseReturn,
+                    StockReferenceType.Purchase,
+                    purchase.Id,
+                    $"Purchase {purchase.PurchaseNumber} cancelled"), cancellationToken);
+
+                if (removeResult.IsFailure)
+                {
+                    return Result.Failure<PurchaseDetail>(
+                        $"Failed to reverse stock for one of the items: {removeResult.Error}");
+                }
+            }
+        }
+
+        purchase.Status = PurchaseStatus.Cancelled;
+
+        await _auditLogger.LogAsync(
+            AuditAction.Updated, nameof(Purchase), purchase.Id,
+            $"Purchase '{purchase.PurchaseNumber}' cancelled.", cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return Result.Success(await ToDetailByIdAsync(purchase.Id, cancellationToken));
+    }
+
+    public async Task<Result<PurchaseDetail>> SetPaymentStatusAsync(
+        Guid purchaseId, PurchasePaymentStatus paymentStatus, CancellationToken cancellationToken = default)
+    {
+        var purchase = await _context.Purchases.SingleOrDefaultAsync(p => p.Id == purchaseId, cancellationToken);
+        if (purchase is null)
+        {
+            return Result.Failure<PurchaseDetail>("Purchase not found.");
+        }
+
+        purchase.PaymentStatus = paymentStatus;
+
+        await _auditLogger.LogAsync(
+            AuditAction.Updated, nameof(Purchase), purchase.Id,
+            $"Purchase '{purchase.PurchaseNumber}' payment status set to {paymentStatus}.", cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return Result.Success(await ToDetailByIdAsync(purchase.Id, cancellationToken));
+    }
+
+    private IQueryable<Purchase> BuildFilteredQuery(PurchaseQueryParameters query)
+    {
+        var purchases = _context.Purchases.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(query.SearchTerm))
+        {
+            var term = query.SearchTerm.Trim();
+            purchases = purchases.Where(p =>
+                p.PurchaseNumber.Contains(term)
+                || (p.SupplierInvoiceNumber != null && p.SupplierInvoiceNumber.Contains(term)));
+        }
+
+        if (query.SupplierId is { } supplierId)
+        {
+            purchases = purchases.Where(p => p.SupplierId == supplierId);
+        }
+
+        if (query.Status is { } status)
+        {
+            purchases = purchases.Where(p => p.Status == status);
+        }
+
+        if (query.FromDate is { } fromDate)
+        {
+            purchases = purchases.Where(p => p.PurchaseDate >= fromDate);
+        }
+
+        if (query.ToDate is { } toDate)
+        {
+            purchases = purchases.Where(p => p.PurchaseDate <= toDate);
+        }
+
+        return purchases;
+    }
+
+    private async Task<string?> ValidateAsync(
+        Guid supplierId, IReadOnlyList<PurchaseItemRequest> items, CancellationToken cancellationToken)
+    {
+        if (items.Count == 0)
+        {
+            return "At least one item is required.";
+        }
+
+        var supplierExists = await _context.Suppliers.AnyAsync(s => s.Id == supplierId, cancellationToken);
+        if (!supplierExists)
+        {
+            return "Selected supplier does not exist.";
+        }
+
+        foreach (var item in items)
+        {
+            if (item.Quantity <= 0)
+            {
+                return "Item quantity must be greater than zero.";
+            }
+
+            if (item.UnitCost < 0)
+            {
+                return "Item unit cost cannot be negative.";
+            }
+
+            if (item.DiscountAmount < 0)
+            {
+                return "Item discount cannot be negative.";
+            }
+
+            if (item.TaxPercentage is < 0 or > 100)
+            {
+                return "Item tax percentage must be between 0 and 100.";
+            }
+
+            var productExists = await _context.Products.AnyAsync(p => p.Id == item.ProductId, cancellationToken);
+            if (!productExists)
+            {
+                return "One of the items refers to a product that no longer exists.";
+            }
+        }
+
+        return null;
+    }
+
+    private async Task<string> GenerateNextPurchaseNumberAsync(CancellationToken cancellationToken)
+    {
+        // IgnoreQueryFilters: a soft-deleted draft must still count, or its
+        // number could be issued again to a later purchase, colliding with
+        // the unique index on PurchaseNumber.
+        var count = await _context.Purchases.IgnoreQueryFilters().CountAsync(cancellationToken);
+        return $"PO-{count + 1:D5}";
+    }
+
+    private async Task<PurchaseDetail> ToDetailByIdAsync(Guid purchaseId, CancellationToken cancellationToken)
+    {
+        var purchase = await _context.Purchases
+            .Include(p => p.Supplier)
+            .Include(p => p.Items)
+            .ThenInclude(i => i.Product)
+            .SingleAsync(p => p.Id == purchaseId, cancellationToken);
+
+        return ToDetail(purchase);
+    }
+
+    private static PurchaseDetail ToDetail(Purchase purchase)
+    {
+        var items = purchase.Items
+            .Select(i => new PurchaseItemDetail(
+                i.Id, i.ProductId, i.Product.Sku, i.Product.Name, i.Quantity, i.UnitCost,
+                i.DiscountAmount, i.TaxPercentage, i.TaxAmount, i.LineTotal))
+            .ToList();
+
+        return new PurchaseDetail(
+            purchase.Id, purchase.PurchaseNumber, purchase.SupplierInvoiceNumber, purchase.SupplierId,
+            purchase.Supplier.Name, purchase.PurchaseDate, purchase.Status, purchase.PaymentStatus,
+            purchase.Subtotal, purchase.DiscountAmount, purchase.TaxAmount, purchase.TotalAmount,
+            purchase.Notes, items);
+    }
+}

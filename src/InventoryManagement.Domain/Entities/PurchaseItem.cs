@@ -22,6 +22,14 @@ public class PurchaseItem : BaseEntity
 
     public decimal UnitCost { get; set; }
 
-    /// <summary>Quantity * UnitCost, stored (not computed) so historical lines are unaffected by later price changes.</summary>
+    public decimal DiscountAmount { get; set; }
+
+    /// <summary>Tax rate applied to this line, captured at entry time (often defaulted from Product.TaxPercentage but editable per line).</summary>
+    public decimal TaxPercentage { get; set; }
+
+    /// <summary>(Quantity * UnitCost - DiscountAmount) * TaxPercentage / 100, stored so historical lines are unaffected by later rate changes.</summary>
+    public decimal TaxAmount { get; set; }
+
+    /// <summary>(Quantity * UnitCost) - DiscountAmount + TaxAmount, stored (not computed) so historical lines are unaffected by later price changes.</summary>
     public decimal LineTotal { get; set; }
 }

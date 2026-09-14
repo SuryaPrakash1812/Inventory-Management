@@ -23,6 +23,8 @@ public class Purchase : AuditableSoftDeleteEntity
 
     public PurchaseStatus Status { get; set; } = PurchaseStatus.Draft;
 
+    public PurchasePaymentStatus PaymentStatus { get; set; } = PurchasePaymentStatus.Unpaid;
+
     public decimal Subtotal { get; set; }
 
     public decimal TaxAmount { get; set; }
