@@ -56,6 +56,8 @@ public sealed class CustomerService : ICustomerService
     public async Task<Result<CustomerSummary>> CreateCustomerAsync(
         CreateCustomerRequest request, CancellationToken cancellationToken = default)
     {
+        _context.ChangeTracker.Clear();
+
         var validationError = Validate(request.Name, request.Email);
         if (validationError is not null)
         {
@@ -86,6 +88,8 @@ public sealed class CustomerService : ICustomerService
     public async Task<Result<CustomerSummary>> UpdateCustomerAsync(
         UpdateCustomerRequest request, CancellationToken cancellationToken = default)
     {
+        _context.ChangeTracker.Clear();
+
         var customer = await _context.Customers
             .SingleOrDefaultAsync(c => c.Id == request.CustomerId, cancellationToken);
         if (customer is null)
@@ -117,6 +121,8 @@ public sealed class CustomerService : ICustomerService
 
     public async Task<Result> DeactivateCustomerAsync(Guid customerId, CancellationToken cancellationToken = default)
     {
+        _context.ChangeTracker.Clear();
+
         var customer = await _context.Customers.SingleOrDefaultAsync(c => c.Id == customerId, cancellationToken);
         if (customer is null)
         {

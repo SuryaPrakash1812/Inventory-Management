@@ -94,6 +94,13 @@ public sealed class ProductService : IProductService
     public async Task<Result<ProductSummary>> CreateProductAsync(
         CreateProductRequest request, CancellationToken cancellationToken = default)
     {
+        // See IAppDbContext.ChangeTracker remarks - this app keeps one
+        // shared DbContext open for the whole session, so a mutating
+        // method's own queries should start from a clean slate rather than
+        // risk picking up an entity left tracked-and-now-stale by an
+        // earlier, unrelated operation in the same session.
+        _context.ChangeTracker.Clear();
+
         var validationError = ValidateBasics(
             request.Sku, request.Name, request.CategoryId,
             request.PurchasePrice, request.SellingPrice, request.TaxPercentage, request.MinimumStock);
@@ -174,6 +181,8 @@ public sealed class ProductService : IProductService
     public async Task<Result<ProductSummary>> UpdateProductAsync(
         UpdateProductRequest request, CancellationToken cancellationToken = default)
     {
+        _context.ChangeTracker.Clear();
+
         var product = await _context.Products.SingleOrDefaultAsync(p => p.Id == request.ProductId, cancellationToken);
         if (product is null)
         {
@@ -225,6 +234,8 @@ public sealed class ProductService : IProductService
 
     public async Task<Result> DeactivateProductAsync(Guid productId, CancellationToken cancellationToken = default)
     {
+        _context.ChangeTracker.Clear();
+
         var product = await _context.Products.SingleOrDefaultAsync(p => p.Id == productId, cancellationToken);
         if (product is null)
         {

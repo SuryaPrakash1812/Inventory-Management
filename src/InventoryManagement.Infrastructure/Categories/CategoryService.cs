@@ -54,6 +54,8 @@ public sealed class CategoryService : ICategoryService
     public async Task<Result<CategorySummary>> SaveCategoryAsync(
         SaveCategoryRequest request, CancellationToken cancellationToken = default)
     {
+        _context.ChangeTracker.Clear();
+
         if (string.IsNullOrWhiteSpace(request.Name))
         {
             return Result.Failure<CategorySummary>("Category name is required.");
@@ -104,6 +106,8 @@ public sealed class CategoryService : ICategoryService
 
     public async Task<Result> DeleteCategoryAsync(Guid categoryId, CancellationToken cancellationToken = default)
     {
+        _context.ChangeTracker.Clear();
+
         var category = await _context.Categories.SingleOrDefaultAsync(c => c.Id == categoryId, cancellationToken);
         if (category is null)
         {

@@ -49,6 +49,24 @@ public interface IAppDbContext
     EntityEntry<TEntity> Entry<TEntity>(TEntity entity) where TEntity : class;
 
     /// <summary>
+    /// Exposes EF Core's change tracker directly, specifically so a
+    /// mutating service method can call ChangeTracker.Clear() at its very
+    /// start (see PurchaseService for the pattern). This app deliberately
+    /// keeps one shared DbContext open for the whole session (see
+    /// App.xaml.cs's _appScope), which is fine for reads but means entities
+    /// loaded and saved by one operation (e.g. auto-saving a payment status
+    /// change) can remain tracked and go stale by the time a DIFFERENT
+    /// operation on the same record runs moments later in the same
+    /// session - EF Core's identity resolution then hands that stale
+    /// tracked instance back to the new operation instead of a fresh load,
+    /// which can produce a DbUpdateConcurrencyException ("expected to
+    /// affect 1 row, but affected 0") even though nothing is actually wrong
+    /// with the data. Clearing the tracker at the start of a mutating
+    /// method's own queries guarantees it starts from a clean slate.
+    /// </summary>
+    ChangeTracker ChangeTracker { get; }
+
+    /// <summary>
     /// Starts an explicit transaction spanning more than one SaveChangesAsync
     /// call. A single SaveChangesAsync call is already atomic on its own -
     /// this is only for the rarer case of needing to read back generated data

@@ -96,6 +96,12 @@ public sealed class PurchaseService : IPurchaseService
     public async Task<Result<PurchaseDetail>> SaveDraftAsync(
         SaveDraftPurchaseRequest request, CancellationToken cancellationToken = default)
     {
+        // See IAppDbContext.ChangeTracker remarks: guarantees this method's
+        // own queries start from a clean slate, regardless of what an
+        // earlier operation in this session (e.g. an auto-saved payment
+        // status change) left tracked.
+        _context.ChangeTracker.Clear();
+
         var validationError = await ValidateAsync(request.SupplierId, request.Items, cancellationToken);
         if (validationError is not null)
         {
@@ -183,6 +189,8 @@ public sealed class PurchaseService : IPurchaseService
 
     public async Task<Result> DeleteDraftAsync(Guid purchaseId, CancellationToken cancellationToken = default)
     {
+        _context.ChangeTracker.Clear();
+
         var purchase = await _context.Purchases.SingleOrDefaultAsync(p => p.Id == purchaseId, cancellationToken);
         if (purchase is null)
         {
@@ -207,6 +215,8 @@ public sealed class PurchaseService : IPurchaseService
     public async Task<Result<PurchaseDetail>> ConfirmPurchaseAsync(
         Guid purchaseId, CancellationToken cancellationToken = default)
     {
+        _context.ChangeTracker.Clear();
+
         var purchase = await _context.Purchases
             .Include(p => p.Items)
             .SingleOrDefaultAsync(p => p.Id == purchaseId, cancellationToken);
@@ -261,6 +271,8 @@ public sealed class PurchaseService : IPurchaseService
     public async Task<Result<PurchaseDetail>> CancelPurchaseAsync(
         Guid purchaseId, CancellationToken cancellationToken = default)
     {
+        _context.ChangeTracker.Clear();
+
         var purchase = await _context.Purchases
             .Include(p => p.Items)
             .SingleOrDefaultAsync(p => p.Id == purchaseId, cancellationToken);
@@ -325,6 +337,8 @@ public sealed class PurchaseService : IPurchaseService
     public async Task<Result<PurchaseDetail>> SetPaymentStatusAsync(
         Guid purchaseId, PurchasePaymentStatus paymentStatus, CancellationToken cancellationToken = default)
     {
+        _context.ChangeTracker.Clear();
+
         var purchase = await _context.Purchases.SingleOrDefaultAsync(p => p.Id == purchaseId, cancellationToken);
         if (purchase is null)
         {

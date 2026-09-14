@@ -56,6 +56,8 @@ public sealed class SupplierService : ISupplierService
     public async Task<Result<SupplierSummary>> CreateSupplierAsync(
         CreateSupplierRequest request, CancellationToken cancellationToken = default)
     {
+        _context.ChangeTracker.Clear();
+
         var validationError = Validate(request.Name, request.Email);
         if (validationError is not null)
         {
@@ -86,6 +88,8 @@ public sealed class SupplierService : ISupplierService
     public async Task<Result<SupplierSummary>> UpdateSupplierAsync(
         UpdateSupplierRequest request, CancellationToken cancellationToken = default)
     {
+        _context.ChangeTracker.Clear();
+
         var supplier = await _context.Suppliers
             .SingleOrDefaultAsync(s => s.Id == request.SupplierId, cancellationToken);
         if (supplier is null)
@@ -117,6 +121,8 @@ public sealed class SupplierService : ISupplierService
 
     public async Task<Result> DeactivateSupplierAsync(Guid supplierId, CancellationToken cancellationToken = default)
     {
+        _context.ChangeTracker.Clear();
+
         var supplier = await _context.Suppliers.SingleOrDefaultAsync(s => s.Id == supplierId, cancellationToken);
         if (supplier is null)
         {
