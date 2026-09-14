@@ -59,7 +59,15 @@ public sealed class PurchaseService : IPurchaseService
     public async Task<PurchaseDetail?> GetPurchaseByIdAsync(
         Guid purchaseId, CancellationToken cancellationToken = default)
     {
+        // AsNoTracking: this is a read-only "view" query. Every mutating
+        // method (SaveDraftAsync, ConfirmPurchaseAsync, CancelPurchaseAsync)
+        // does its own separate tracked load when it actually needs to
+        // modify something - this one must never leave tracked entities
+        // behind in the shared, long-lived DbContext, or a later mutation's
+        // own load could collide with stale state left over from simply
+        // having opened the purchase to look at it earlier in the session.
         var purchase = await _context.Purchases
+            .AsNoTracking()
             .Include(p => p.Supplier)
             .Include(p => p.Items)
             .ThenInclude(i => i.Product)
@@ -409,6 +417,7 @@ public sealed class PurchaseService : IPurchaseService
     private async Task<PurchaseDetail> ToDetailByIdAsync(Guid purchaseId, CancellationToken cancellationToken)
     {
         var purchase = await _context.Purchases
+            .AsNoTracking()
             .Include(p => p.Supplier)
             .Include(p => p.Items)
             .ThenInclude(i => i.Product)

@@ -144,8 +144,19 @@
                                 <ComboBox ItemsSource="{Binding PaymentStatusOptions}"
                                           SelectedItem="{Binding FormPaymentStatus}"
                                           MaxWidth="220"
-                                          HorizontalAlignment="Left" />
+                                          HorizontalAlignment="Left"
+                                          Margin="0,0,0,4" />
+                                <ui:TextBlock Text="Saves immediately when changed - no separate save needed for this field."
+                                              FontTypography="Caption"
+                                              Opacity="0.5" />
                             </StackPanel>
+
+                            <ui:TextBlock Text="Other fields are locked once a purchase is Confirmed or Cancelled - only payment status can still be changed."
+                                          Visibility="{Binding CanEditFields, Converter={StaticResource InverseBoolToVisibility}}"
+                                          FontTypography="Caption"
+                                          Opacity="0.6"
+                                          TextWrapping="Wrap"
+                                          Margin="0,0,0,16" />
 
                             <ui:TextBlock Text="Notes (optional)" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
                             <ui:TextBox Text="{Binding FormNotes, UpdateSourceTrigger=PropertyChanged}"
