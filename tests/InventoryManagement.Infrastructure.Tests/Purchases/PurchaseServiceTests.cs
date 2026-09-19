@@ -106,6 +106,33 @@ public class PurchaseServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveDraftAsync_EditedAndSavedMultipleTimesInARow_NeverThrows()
+    {
+        // Regression test: editing and re-saving the same draft repeatedly
+        // used to throw DbUpdateConcurrencyException on the second (or
+        // later) save - ICollection.Clear()'s implicit orphan-detection for
+        // the old PurchaseItem rows was generating an UPDATE against a
+        // stale/mismatched Id instead of the expected DELETE.
+        var created = await _sut.SaveDraftAsync(MakeDraftRequest(quantity: 10, unitCost: 5));
+        var purchaseId = created.Value.Id;
+
+        var second = await _sut.SaveDraftAsync(MakeDraftRequest(purchaseId, quantity: 20, unitCost: 6));
+        var third = await _sut.SaveDraftAsync(MakeDraftRequest(purchaseId, quantity: 30, unitCost: 7));
+        var fourth = await _sut.SaveDraftAsync(MakeDraftRequest(purchaseId, quantity: 40, unitCost: 8));
+
+        Assert.True(second.IsSuccess);
+        Assert.True(third.IsSuccess);
+        Assert.True(fourth.IsSuccess);
+        Assert.Single(fourth.Value.Items);
+        Assert.Equal(40m, fourth.Value.Items[0].Quantity);
+
+        // Only ever one live item for this purchase - every prior edit's
+        // item was genuinely deleted, not left behind as an orphan.
+        var liveItemCount = await _context.PurchaseItems.CountAsync(i => i.PurchaseId == purchaseId);
+        Assert.Equal(1, liveItemCount);
+    }
+
+    [Fact]
     public async Task SaveDraftAsync_WithNoItems_Fails()
     {
         var request = new SaveDraftPurchaseRequest(
