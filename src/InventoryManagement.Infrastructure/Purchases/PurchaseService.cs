@@ -98,8 +98,7 @@ public sealed class PurchaseService : IPurchaseService
     {
         // See IAppDbContext.ChangeTracker remarks: guarantees this method's
         // own queries start from a clean slate, regardless of what an
-        // earlier operation in this session (e.g. an auto-saved payment
-        // status change) left tracked.
+        // earlier operation in this session left tracked.
         _context.ChangeTracker.Clear();
 
         var validationError = await ValidateAsync(request.SupplierId, request.Items, cancellationToken);
@@ -113,10 +112,6 @@ public sealed class PurchaseService : IPurchaseService
 
         if (request.PurchaseId is { } existingId)
         {
-            // No longer .Include(p => p.Items) - the old items are deleted
-            // via ExecuteDeleteAsync below without ever being loaded/
-            // tracked, so there is nothing here for a subsequently-added
-            // new item to collide with.
             var existing = await _context.Purchases
                 .SingleOrDefaultAsync(p => p.Id == existingId, cancellationToken);
 
@@ -132,18 +127,9 @@ public sealed class PurchaseService : IPurchaseService
             }
 
             // Bulk-delete the old items directly against the database,
-            // completely bypassing the change tracker (ExecuteDeleteAsync
-            // issues one DELETE statement immediately - it never loads or
-            // tracks the affected rows at all). Two previous approaches
-            // here (ICollection.Clear()'s implicit orphan-detection, and
-            // RemoveRange followed by Clear()) both corrupted EF Core's
-            // tracking state for a new item added later in the same method,
-            // confirmed via debug output showing that new item marked
-            // Modified instead of Added with an empty-GUID "original"
-            // PurchaseId - producing "expected to affect 1 row, but
-            // affected 0" on what should have been a plain INSERT. Since
-            // ExecuteDeleteAsync never touches the tracker, there is no
-            // tracked state left over for anything to collide with.
+            // completely bypassing the change tracker - it never loads or
+            // tracks the affected rows at all, so there is nothing left
+            // over for anything added later in this method to collide with.
             await _context.PurchaseItems
                 .Where(i => i.PurchaseId == existingId)
                 .ExecuteDeleteAsync(cancellationToken);
@@ -170,6 +156,18 @@ public sealed class PurchaseService : IPurchaseService
 
         decimal subtotal = 0, discountTotal = 0, taxTotal = 0;
 
+        // Every field, including the PurchaseId foreign key, is set
+        // explicitly here rather than left to EF Core's relationship-fixup
+        // (which happens automatically when adding to a tracked navigation
+        // collection like purchase.Items). Each new item is also added
+        // directly to _context.PurchaseItems - its own DbSet - rather than
+        // via purchase.Items.Add(...). Three previous approaches all relied
+        // on some combination of navigation-collection tracking or implicit
+        // fixup and all corrupted EF Core's tracking state for this exact
+        // relationship in the same way; this version depends on none of
+        // that machinery. purchase.Id is safe to reference here even for a
+        // brand-new Purchase that hasn't been saved yet, since BaseEntity
+        // assigns its Guid at construction time, not on save.
         foreach (var itemRequest in request.Items)
         {
             var lineSubtotal = itemRequest.Quantity * itemRequest.UnitCost;
@@ -177,8 +175,9 @@ public sealed class PurchaseService : IPurchaseService
             var taxAmount = taxableAmount * itemRequest.TaxPercentage / 100m;
             var lineTotal = taxableAmount + taxAmount;
 
-            purchase.Items.Add(new PurchaseItem
+            var newItem = new PurchaseItem
             {
+                PurchaseId = purchase.Id,
                 ProductId = itemRequest.ProductId,
                 Quantity = itemRequest.Quantity,
                 UnitCost = itemRequest.UnitCost,
@@ -186,7 +185,9 @@ public sealed class PurchaseService : IPurchaseService
                 TaxPercentage = itemRequest.TaxPercentage,
                 TaxAmount = taxAmount,
                 LineTotal = lineTotal,
-            });
+            };
+
+            _context.PurchaseItems.Add(newItem);
 
             subtotal += lineSubtotal;
             discountTotal += itemRequest.DiscountAmount;
