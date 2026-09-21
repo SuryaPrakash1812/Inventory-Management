@@ -113,8 +113,11 @@ public sealed class PurchaseService : IPurchaseService
 
         if (request.PurchaseId is { } existingId)
         {
+            // No longer .Include(p => p.Items) - the old items are deleted
+            // via ExecuteDeleteAsync below without ever being loaded/
+            // tracked, so there is nothing here for a subsequently-added
+            // new item to collide with.
             var existing = await _context.Purchases
-                .Include(p => p.Items)
                 .SingleOrDefaultAsync(p => p.Id == existingId, cancellationToken);
 
             if (existing is null)
@@ -128,21 +131,23 @@ public sealed class PurchaseService : IPurchaseService
                     $"Purchase is {existing.Status} and can no longer be edited.");
             }
 
-            // Explicitly mark the old items for deletion via RemoveRange
-            // rather than relying on ICollection.Clear()'s implicit orphan-
-            // detection - the latter proved unreliable on its own. Equally
-            // important: do NOT also call existing.Items.Clear() here.
-            // Debug output (a DbUpdateConcurrencyException handler dumping
-            // each entry's original/current property values) showed that
-            // calling Clear() immediately after RemoveRange corrupts
-            // tracking for this same SaveChanges batch - a brand-new
-            // PurchaseItem added moments later in this same method ended up
-            // marked Modified instead of Added, with its PurchaseId's
-            // "original" value showing as an empty GUID, producing an
-            // UPDATE against a row that was never inserted ("expected to
-            // affect 1 row, but affected 0"). RemoveRange alone, without a
-            // follow-up Clear(), is sufficient and doesn't trigger this.
-            _context.PurchaseItems.RemoveRange(existing.Items);
+            // Bulk-delete the old items directly against the database,
+            // completely bypassing the change tracker (ExecuteDeleteAsync
+            // issues one DELETE statement immediately - it never loads or
+            // tracks the affected rows at all). Two previous approaches
+            // here (ICollection.Clear()'s implicit orphan-detection, and
+            // RemoveRange followed by Clear()) both corrupted EF Core's
+            // tracking state for a new item added later in the same method,
+            // confirmed via debug output showing that new item marked
+            // Modified instead of Added with an empty-GUID "original"
+            // PurchaseId - producing "expected to affect 1 row, but
+            // affected 0" on what should have been a plain INSERT. Since
+            // ExecuteDeleteAsync never touches the tracker, there is no
+            // tracked state left over for anything to collide with.
+            await _context.PurchaseItems
+                .Where(i => i.PurchaseId == existingId)
+                .ExecuteDeleteAsync(cancellationToken);
+
             purchase = existing;
             auditAction = AuditAction.Updated;
         }
