@@ -22,12 +22,13 @@ public partial class CustomersPage : Page
 
     private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        if (!_viewModel.IsEditing)
+        if (_viewModel.IsViewingHistory)
         {
             return;
         }
 
-        EditScrollViewer.ScrollToVerticalOffset(EditScrollViewer.VerticalOffset - e.Delta);
+        var scrollViewer = _viewModel.IsEditing ? EditScrollViewer : ListScrollViewer;
+        scrollViewer.ScrollToVerticalOffset(scrollViewer.VerticalOffset - e.Delta);
         e.Handled = true;
     }
 }

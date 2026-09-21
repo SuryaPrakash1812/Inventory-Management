@@ -17,22 +17,16 @@ public partial class CategoriesPage : Page
 
         Loaded += async (_, _) => await viewModel.InitializeAsync();
 
-        // See ProductsPage for why this fallback exists: drives the
-        // ScrollViewer directly from the mouse wheel rather than relying
-        // solely on automatic event bubbling. Only active while the edit
-        // form is showing, so it never interferes with the category grid's
-        // own scrolling in list view.
+        // See ProductsPage for why this fallback exists: drives whichever
+        // ScrollViewer is currently visible directly from the mouse wheel
+        // rather than relying solely on automatic event bubbling.
         PreviewMouseWheel += OnPreviewMouseWheel;
     }
 
     private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        if (!_viewModel.IsEditing)
-        {
-            return;
-        }
-
-        EditScrollViewer.ScrollToVerticalOffset(EditScrollViewer.VerticalOffset - e.Delta);
+        var scrollViewer = _viewModel.IsEditing ? EditScrollViewer : ListScrollViewer;
+        scrollViewer.ScrollToVerticalOffset(scrollViewer.VerticalOffset - e.Delta);
         e.Handled = true;
     }
 }

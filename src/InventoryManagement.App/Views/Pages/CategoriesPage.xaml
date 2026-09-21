@@ -6,56 +6,64 @@
     <Grid Margin="20">
 
         <!-- LIST VIEW -->
-        <Grid Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVisibility}}">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-            </Grid.RowDefinitions>
+        <ScrollViewer x:Name="ListScrollViewer"
+                      Visibility="{Binding IsEditing, Converter={StaticResource InverseBoolToVisibility}}"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalContentAlignment="Stretch"
+                      Background="Transparent"
+                      PanningMode="VerticalOnly">
+            <Grid Background="Transparent">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
-            <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
-                <ui:TextBox Text="{Binding SearchTerm, UpdateSourceTrigger=PropertyChanged}"
-                            PlaceholderText="Search categories by name"
-                            Width="280"
-                            Margin="0,0,8,8">
-                    <ui:TextBox.InputBindings>
-                        <KeyBinding Key="Enter" Command="{Binding SearchCommand}" />
-                    </ui:TextBox.InputBindings>
-                </ui:TextBox>
-                <ui:Button Content="Search" Command="{Binding SearchCommand}" Margin="0,0,16,8" />
-                <ui:Button Content="New Category" Command="{Binding StartCreateCommand}" Appearance="Primary" Margin="0,0,16,8" />
-                <ui:TextBlock Text="{Binding ErrorMessage}"
-                              Foreground="IndianRed"
-                              VerticalAlignment="Center"
-                              Margin="0,0,0,8" />
-            </WrapPanel>
+                <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
+                    <ui:TextBox Text="{Binding SearchTerm, UpdateSourceTrigger=PropertyChanged}"
+                                PlaceholderText="Search categories by name"
+                                Width="280"
+                                Margin="0,0,8,8">
+                        <ui:TextBox.InputBindings>
+                            <KeyBinding Key="Enter" Command="{Binding SearchCommand}" />
+                        </ui:TextBox.InputBindings>
+                    </ui:TextBox>
+                    <ui:Button Content="Search" Command="{Binding SearchCommand}" Margin="0,0,16,8" />
+                    <ui:Button Content="New Category" Command="{Binding StartCreateCommand}" Appearance="Primary" Margin="0,0,16,8" />
+                    <ui:TextBlock Text="{Binding ErrorMessage}"
+                                  Foreground="IndianRed"
+                                  VerticalAlignment="Center"
+                                  Margin="0,0,0,8" />
+                </WrapPanel>
 
-            <DataGrid Grid.Row="1"
-                      ItemsSource="{Binding Categories}"
-                      AutoGenerateColumns="False"
-                      IsReadOnly="True"
-                      CanUserAddRows="False">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="220" />
-                    <DataGridTextColumn Header="Parent" Binding="{Binding ParentCategoryName}" Width="180" />
-                    <DataGridTextColumn Header="Products" Binding="{Binding ProductCount}" Width="100" />
-                    <DataGridTemplateColumn Header="" Width="160">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal">
-                                    <ui:Button Content="Edit"
-                                               Margin="0,0,4,0"
-                                               Command="{Binding DataContext.StartEditCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                               CommandParameter="{Binding}" />
-                                    <ui:Button Content="Delete"
-                                               Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                               CommandParameter="{Binding}" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-                </DataGrid.Columns>
-            </DataGrid>
-        </Grid>
+                <DataGrid Grid.Row="1"
+                          ItemsSource="{Binding Categories}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          CanUserAddRows="False"
+                          MinHeight="200">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="220" />
+                        <DataGridTextColumn Header="Parent" Binding="{Binding ParentCategoryName}" Width="180" />
+                        <DataGridTextColumn Header="Products" Binding="{Binding ProductCount}" Width="100" />
+                        <DataGridTemplateColumn Header="" Width="160">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <ui:Button Content="Edit"
+                                                   Margin="0,0,4,0"
+                                                   Command="{Binding DataContext.StartEditCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                   CommandParameter="{Binding}" />
+                                        <ui:Button Content="Delete"
+                                                   Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                   CommandParameter="{Binding}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </ScrollViewer>
 
         <!-- EDIT VIEW: full width, its own dedicated screen. -->
         <ScrollViewer x:Name="EditScrollViewer"

@@ -27,12 +27,8 @@ public partial class PurchasesPage : Page
 
     private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        if (!_viewModel.IsViewingDetail)
-        {
-            return;
-        }
-
-        DetailScrollViewer.ScrollToVerticalOffset(DetailScrollViewer.VerticalOffset - e.Delta);
+        var scrollViewer = _viewModel.IsViewingDetail ? DetailScrollViewer : ListScrollViewer;
+        scrollViewer.ScrollToVerticalOffset(scrollViewer.VerticalOffset - e.Delta);
         e.Handled = true;
     }
 }

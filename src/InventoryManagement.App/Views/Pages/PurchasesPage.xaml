@@ -6,84 +6,92 @@
     <Grid Margin="20">
 
         <!-- LIST VIEW -->
-        <Grid Visibility="{Binding IsShowingList, Converter={StaticResource BoolToVisibility}}">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
+        <ScrollViewer x:Name="ListScrollViewer"
+                      Visibility="{Binding IsShowingList, Converter={StaticResource BoolToVisibility}}"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalContentAlignment="Stretch"
+                      Background="Transparent"
+                      PanningMode="VerticalOnly">
+            <Grid Background="Transparent">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
-            <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
-                <ui:Button Content="New Purchase" Command="{Binding StartCreateCommand}" Appearance="Primary" />
-            </WrapPanel>
+                <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+                    <ui:Button Content="New Purchase" Command="{Binding StartCreateCommand}" Appearance="Primary" />
+                </WrapPanel>
 
-            <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
-                <ui:TextBox Text="{Binding SearchTerm, UpdateSourceTrigger=PropertyChanged}"
-                            PlaceholderText="Search by purchase # or supplier invoice #"
-                            Width="260"
-                            Margin="0,0,16,8">
-                    <ui:TextBox.InputBindings>
-                        <KeyBinding Key="Enter" Command="{Binding SearchCommand}" />
-                    </ui:TextBox.InputBindings>
-                </ui:TextBox>
+                <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
+                    <ui:TextBox Text="{Binding SearchTerm, UpdateSourceTrigger=PropertyChanged}"
+                                PlaceholderText="Search by purchase # or supplier invoice #"
+                                Width="260"
+                                Margin="0,0,16,8">
+                        <ui:TextBox.InputBindings>
+                            <KeyBinding Key="Enter" Command="{Binding SearchCommand}" />
+                        </ui:TextBox.InputBindings>
+                    </ui:TextBox>
 
-                <ui:TextBlock Text="Supplier:" VerticalAlignment="Center" Margin="0,0,8,8" />
-                <ComboBox ItemsSource="{Binding Suppliers}"
-                          SelectedItem="{Binding SelectedSupplierFilter}"
-                          DisplayMemberPath="Name"
-                          MinWidth="160"
-                          Margin="0,0,16,8" />
+                    <ui:TextBlock Text="Supplier:" VerticalAlignment="Center" Margin="0,0,8,8" />
+                    <ComboBox ItemsSource="{Binding Suppliers}"
+                              SelectedItem="{Binding SelectedSupplierFilter}"
+                              DisplayMemberPath="Name"
+                              MinWidth="160"
+                              Margin="0,0,16,8" />
 
-                <ui:TextBlock Text="Status:" VerticalAlignment="Center" Margin="0,0,8,8" />
-                <ComboBox ItemsSource="{Binding StatusFilterOptions}"
-                          SelectedItem="{Binding SelectedStatusFilter}"
-                          MinWidth="110"
-                          Margin="0,0,16,8" />
+                    <ui:TextBlock Text="Status:" VerticalAlignment="Center" Margin="0,0,8,8" />
+                    <ComboBox ItemsSource="{Binding StatusFilterOptions}"
+                              SelectedItem="{Binding SelectedStatusFilter}"
+                              MinWidth="110"
+                              Margin="0,0,16,8" />
 
-                <ui:TextBlock Text="From:" VerticalAlignment="Center" Margin="0,0,8,8" />
-                <DatePicker SelectedDate="{Binding FromDateFilter}" Margin="0,0,16,8" />
+                    <ui:TextBlock Text="From:" VerticalAlignment="Center" Margin="0,0,8,8" />
+                    <DatePicker SelectedDate="{Binding FromDateFilter}" Margin="0,0,16,8" />
 
-                <ui:TextBlock Text="To:" VerticalAlignment="Center" Margin="0,0,8,8" />
-                <DatePicker SelectedDate="{Binding ToDateFilter}" Margin="0,0,16,8" />
+                    <ui:TextBlock Text="To:" VerticalAlignment="Center" Margin="0,0,8,8" />
+                    <DatePicker SelectedDate="{Binding ToDateFilter}" Margin="0,0,16,8" />
 
-                <ui:Button Content="Search" Command="{Binding SearchCommand}" Appearance="Primary" Margin="0,0,8,8" />
-                <ui:Button Content="Clear Filters" Command="{Binding ClearFiltersCommand}" Margin="0,0,0,8" />
-            </WrapPanel>
+                    <ui:Button Content="Search" Command="{Binding SearchCommand}" Appearance="Primary" Margin="0,0,8,8" />
+                    <ui:Button Content="Clear Filters" Command="{Binding ClearFiltersCommand}" Margin="0,0,0,8" />
+                </WrapPanel>
 
-            <DataGrid Grid.Row="2"
-                      ItemsSource="{Binding Purchases}"
-                      AutoGenerateColumns="False"
-                      IsReadOnly="True"
-                      CanUserAddRows="False">
-                <DataGrid.Columns>
-                    <DataGridTextColumn Header="Purchase #" Binding="{Binding PurchaseNumber}" Width="110" />
-                    <DataGridTextColumn Header="Supplier" Binding="{Binding SupplierName}" Width="180" />
-                    <DataGridTextColumn Header="Date" Binding="{Binding PurchaseDate, StringFormat=d}" Width="100" />
-                    <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" />
-                    <DataGridTextColumn Header="Payment" Binding="{Binding PaymentStatus}" Width="110" />
-                    <DataGridTextColumn Header="Total" Binding="{Binding TotalAmount, StringFormat=N2}" Width="100" />
-                    <DataGridTemplateColumn Header="" Width="90">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate>
-                                <ui:Button Content="Open"
-                                           Command="{Binding DataContext.StartViewCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                           CommandParameter="{Binding}" />
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-                </DataGrid.Columns>
-            </DataGrid>
+                <DataGrid Grid.Row="2"
+                          ItemsSource="{Binding Purchases}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          CanUserAddRows="False"
+                          MinHeight="200">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Purchase #" Binding="{Binding PurchaseNumber}" Width="110" />
+                        <DataGridTextColumn Header="Supplier" Binding="{Binding SupplierName}" Width="180" />
+                        <DataGridTextColumn Header="Date" Binding="{Binding PurchaseDate, StringFormat=d}" Width="100" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" />
+                        <DataGridTextColumn Header="Payment" Binding="{Binding PaymentStatus}" Width="110" />
+                        <DataGridTextColumn Header="Total" Binding="{Binding TotalAmount, StringFormat=N2}" Width="100" />
+                        <DataGridTemplateColumn Header="" Width="90">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <ui:Button Content="Open"
+                                               Command="{Binding DataContext.StartViewCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                               CommandParameter="{Binding}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
 
-            <WrapPanel Grid.Row="3" Orientation="Horizontal" Margin="0,12,0,0">
-                <ui:Button Content="Previous" Command="{Binding PreviousPageCommand}" Margin="0,0,8,0" />
-                <ui:TextBlock VerticalAlignment="Center" Margin="0,0,8,0">
-                    <Run Text="Page" /> <Run Text="{Binding PageNumber, Mode=OneWay}" /> <Run Text="of" /> <Run Text="{Binding TotalPages, Mode=OneWay}" />
-                    <Run Text="(" /><Run Text="{Binding TotalCount, Mode=OneWay}" /> <Run Text="total)" />
-                </ui:TextBlock>
-                <ui:Button Content="Next" Command="{Binding NextPageCommand}" />
-            </WrapPanel>
-        </Grid>
+                <WrapPanel Grid.Row="3" Orientation="Horizontal" Margin="0,12,0,0">
+                    <ui:Button Content="Previous" Command="{Binding PreviousPageCommand}" Margin="0,0,8,0" />
+                    <ui:TextBlock VerticalAlignment="Center" Margin="0,0,8,0">
+                        <Run Text="Page" /> <Run Text="{Binding PageNumber, Mode=OneWay}" /> <Run Text="of" /> <Run Text="{Binding TotalPages, Mode=OneWay}" />
+                        <Run Text="(" /><Run Text="{Binding TotalCount, Mode=OneWay}" /> <Run Text="total)" />
+                    </ui:TextBlock>
+                    <ui:Button Content="Next" Command="{Binding NextPageCommand}" />
+                </WrapPanel>
+            </Grid>
+        </ScrollViewer>
 
         <!-- DETAIL VIEW -->
         <ScrollViewer x:Name="DetailScrollViewer"
