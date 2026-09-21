@@ -128,19 +128,21 @@ public sealed class PurchaseService : IPurchaseService
                     $"Purchase is {existing.Status} and can no longer be edited.");
             }
 
-            // Explicitly mark the old items for deletion rather than
-            // relying on ICollection.Clear()'s implicit orphan-detection.
-            // EF Core is SUPPOSED to auto-delete an entity whose required
-            // (non-nullable FK) relationship to its parent is severed this
-            // way, but that has proven unreliable here in practice -
-            // instead of the expected DELETE, it was generating an UPDATE
-            // referencing a PurchaseItem Id that turned out not to match
-            // what the database actually had, producing "expected to
-            // affect 1 row, but affected 0". RemoveRange sidesteps that
-            // entirely by putting these entities into the Deleted state
-            // directly and unambiguously.
+            // Explicitly mark the old items for deletion via RemoveRange
+            // rather than relying on ICollection.Clear()'s implicit orphan-
+            // detection - the latter proved unreliable on its own. Equally
+            // important: do NOT also call existing.Items.Clear() here.
+            // Debug output (a DbUpdateConcurrencyException handler dumping
+            // each entry's original/current property values) showed that
+            // calling Clear() immediately after RemoveRange corrupts
+            // tracking for this same SaveChanges batch - a brand-new
+            // PurchaseItem added moments later in this same method ended up
+            // marked Modified instead of Added, with its PurchaseId's
+            // "original" value showing as an empty GUID, producing an
+            // UPDATE against a row that was never inserted ("expected to
+            // affect 1 row, but affected 0"). RemoveRange alone, without a
+            // follow-up Clear(), is sufficient and doesn't trigger this.
             _context.PurchaseItems.RemoveRange(existing.Items);
-            existing.Items.Clear();
             purchase = existing;
             auditAction = AuditAction.Updated;
         }
