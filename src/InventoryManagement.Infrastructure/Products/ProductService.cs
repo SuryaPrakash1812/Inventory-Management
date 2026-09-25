@@ -42,17 +42,21 @@ public sealed class ProductService : IProductService
 
         List<ProductSummary> items;
 
-        if (query.SortColumn == ProductSortColumn.CreatedAtUtc)
+        // SQLite's EF Core provider cannot translate ORDER BY on a
+        // DateTimeOffset OR a decimal column into SQL ("SQLite does not
+        // support expressions of type 'X' in ORDER BY clauses") - a
+        // genuine limitation of that provider. This previously only
+        // routed CreatedAtUtc (DateTimeOffset) through the in-memory
+        // fallback below, on the mistaken assumption that decimal columns
+        // sorted natively - they don't; SellingPrice and CurrentStock
+        // (QuantityOnHand) are both decimal and hit the exact same
+        // limitation, just not exercised by a test until now. Every
+        // in-memory-sorted column is included here for the same reason.
+        var needsInMemorySort = query.SortColumn is ProductSortColumn.CreatedAtUtc
+            or ProductSortColumn.SellingPrice or ProductSortColumn.CurrentStock;
+
+        if (needsInMemorySort)
         {
-            // SQLite's EF Core provider cannot translate ORDER BY on a
-            // DateTimeOffset column into SQL ("SQLite does not support
-            // expressions of type 'DateTimeOffset' in ORDER BY clauses") -
-            // a genuine limitation of that provider, unrelated to how the
-            // search was triggered. Every other sort column here is a
-            // string or decimal, which SQLite orders natively; this is the
-            // one case that needs an in-memory fallback rather than
-            // changing how every timestamp in the schema is stored, which
-            // would be a much larger change for one sort option.
             var all = await filtered
                 .Select(p => new ProductSummary(
                     p.Id, p.Sku, p.Barcode, p.Name, p.Brand, p.CategoryId, p.Category.Name, p.Unit,
@@ -60,9 +64,18 @@ public sealed class ProductService : IProductService
                     p.IsActive, p.CreatedAtUtc, p.ModifiedAtUtc))
                 .ToListAsync(cancellationToken);
 
-            var sorted = query.SortDescending
-                ? all.OrderByDescending(p => p.CreatedAtUtc)
-                : all.OrderBy(p => p.CreatedAtUtc);
+            IOrderedEnumerable<ProductSummary> sorted = query.SortColumn switch
+            {
+                ProductSortColumn.SellingPrice => query.SortDescending
+                    ? all.OrderByDescending(p => p.SellingPrice)
+                    : all.OrderBy(p => p.SellingPrice),
+                ProductSortColumn.CurrentStock => query.SortDescending
+                    ? all.OrderByDescending(p => p.CurrentStock)
+                    : all.OrderBy(p => p.CurrentStock),
+                _ => query.SortDescending
+                    ? all.OrderByDescending(p => p.CreatedAtUtc)
+                    : all.OrderBy(p => p.CreatedAtUtc),
+            };
 
             items = sorted.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList();
         }
