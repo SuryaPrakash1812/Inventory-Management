@@ -26,6 +26,8 @@
       persistence for the same Domain, for different databases.
     -->
     <ProjectReference Include="..\InventoryManagement.Domain\InventoryManagement.Domain.csproj" />
+	    <ProjectReference Include="..\InventoryManagement.Contracts\InventoryManagement.Contracts.csproj" />
+
   </ItemGroup>
 
 </Project>
