@@ -1,4 +1,5 @@
 using InventoryManagement.Domain.Purchases;
+using Microsoft.EntityFrameworkCore;
 
 namespace InventoryManagement.Infrastructure.Postgres.Purchases;
 
