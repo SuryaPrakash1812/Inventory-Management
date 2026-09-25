@@ -1,6 +1,8 @@
 using InventoryManagement.Application.Customers;
 using InventoryManagement.Domain.Enums;
 using InventoryManagement.Infrastructure.Auth;
+using InventoryManagement.Infrastructure.Common;
+using InventoryManagement.Infrastructure.Customers;
 using InventoryManagement.Infrastructure.Data;
 using InventoryManagement.Infrastructure.Data.Interceptors;
 using Microsoft.Data.Sqlite;

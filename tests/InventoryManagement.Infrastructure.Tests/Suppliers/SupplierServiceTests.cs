@@ -1,8 +1,10 @@
 using InventoryManagement.Application.Suppliers;
 using InventoryManagement.Domain.Enums;
 using InventoryManagement.Infrastructure.Auth;
+using InventoryManagement.Infrastructure.Common;
 using InventoryManagement.Infrastructure.Data;
 using InventoryManagement.Infrastructure.Data.Interceptors;
+using InventoryManagement.Infrastructure.Suppliers;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Xunit;

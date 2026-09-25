@@ -1,4 +1,5 @@
 using InventoryManagement.Infrastructure.Auth;
+using InventoryManagement.Infrastructure.Common;
 using InventoryManagement.Infrastructure.Data;
 using InventoryManagement.Infrastructure.Data.Interceptors;
 using Microsoft.Data.Sqlite;
