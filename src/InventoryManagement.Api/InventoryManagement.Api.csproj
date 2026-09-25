@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>InventoryManagement.Api</RootNamespace>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      No direct reference to InventoryManagement.Infrastructure (the SQLite
+      project) - the API has no business talking to SQLite, ever. It
+      references Domain (for PurchaseWorkflow - the same shared business
+      rules the local SQLite implementation uses, so the two never drift
+      apart), Contracts (the wire DTOs it accepts/returns), and
+      Infrastructure.Postgres (its own persistence).
+    -->
+    <ProjectReference Include="..\InventoryManagement.Domain\InventoryManagement.Domain.csproj" />
+    <ProjectReference Include="..\InventoryManagement.Contracts\InventoryManagement.Contracts.csproj" />
+    <ProjectReference Include="..\InventoryManagement.Infrastructure.Postgres\InventoryManagement.Infrastructure.Postgres.csproj" />
+  </ItemGroup>
+
+</Project>

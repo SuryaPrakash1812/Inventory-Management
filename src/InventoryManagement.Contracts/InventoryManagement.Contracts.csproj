@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>InventoryManagement.Contracts</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Only Domain, and only for its enums (PurchaseStatus, etc.) - Contracts
+      must never reference Application, Infrastructure, EF Core, or WPF.
+      Everything in this project must be safe to eventually serve to a
+      future Angular client with zero changes: plain records, primitives,
+      enums, Guids, decimals, DateTimeOffsets. No EF Core entities are
+      exposed here, ever - see each contract file's own remarks.
+    -->
+    <ProjectReference Include="..\InventoryManagement.Domain\InventoryManagement.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,9 +1,9 @@
 using InventoryManagement.Application.Auth;
-using InventoryManagement.Application.Common.Interfaces;
 using InventoryManagement.Application.Users;
 using InventoryManagement.Core.Common;
 using InventoryManagement.Domain.Entities;
 using InventoryManagement.Domain.Enums;
+using InventoryManagement.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace InventoryManagement.Infrastructure.Users;

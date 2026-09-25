@@ -1,10 +1,14 @@
+using System.Text.Json;
 using InventoryManagement.Application.Auth;
 using InventoryManagement.Application.Common.Interfaces;
 using InventoryManagement.Application.Inventory;
 using InventoryManagement.Application.Purchases;
+using InventoryManagement.Contracts.Purchases;
 using InventoryManagement.Core.Common;
 using InventoryManagement.Domain.Entities;
 using InventoryManagement.Domain.Enums;
+using InventoryManagement.Domain.Purchases;
+using InventoryManagement.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace InventoryManagement.Infrastructure.Purchases;
@@ -120,10 +124,10 @@ public sealed class PurchaseService : IPurchaseService
                 return Result.Failure<PurchaseDetail>("Purchase not found.");
             }
 
-            if (existing.Status != PurchaseStatus.Draft)
+            var editGuard = PurchaseWorkflow.EnsureEditable(existing.Status);
+            if (editGuard.IsFailure)
             {
-                return Result.Failure<PurchaseDetail>(
-                    $"Purchase is {existing.Status} and can no longer be edited.");
+                return Result.Failure<PurchaseDetail>(editGuard.Error!);
             }
 
             // Bulk-delete the old items directly against the database,
@@ -170,10 +174,8 @@ public sealed class PurchaseService : IPurchaseService
         // assigns its Guid at construction time, not on save.
         foreach (var itemRequest in request.Items)
         {
-            var lineSubtotal = itemRequest.Quantity * itemRequest.UnitCost;
-            var taxableAmount = lineSubtotal - itemRequest.DiscountAmount;
-            var taxAmount = taxableAmount * itemRequest.TaxPercentage / 100m;
-            var lineTotal = taxableAmount + taxAmount;
+            var computation = PurchaseWorkflow.ComputeLine(
+                itemRequest.Quantity, itemRequest.UnitCost, itemRequest.DiscountAmount, itemRequest.TaxPercentage);
 
             var newItem = new PurchaseItem
             {
@@ -183,15 +185,15 @@ public sealed class PurchaseService : IPurchaseService
                 UnitCost = itemRequest.UnitCost,
                 DiscountAmount = itemRequest.DiscountAmount,
                 TaxPercentage = itemRequest.TaxPercentage,
-                TaxAmount = taxAmount,
-                LineTotal = lineTotal,
+                TaxAmount = computation.TaxAmount,
+                LineTotal = computation.LineTotal,
             };
 
             _context.PurchaseItems.Add(newItem);
 
-            subtotal += lineSubtotal;
-            discountTotal += itemRequest.DiscountAmount;
-            taxTotal += taxAmount;
+            subtotal += computation.LineSubtotal;
+            discountTotal += computation.DiscountAmount;
+            taxTotal += computation.TaxAmount;
         }
 
         purchase.Subtotal = subtotal;
@@ -199,12 +201,56 @@ public sealed class PurchaseService : IPurchaseService
         purchase.TaxAmount = taxTotal;
         purchase.TotalAmount = subtotal - discountTotal + taxTotal;
 
+        // Decision 8: a brand-new purchase queues an Outbox entry in the
+        // SAME SaveChangesAsync call as the business data below - never a
+        // separate commit, so it is impossible for this purchase to exist
+        // locally without a corresponding Outbox row, or vice versa. Only
+        // creation is queued in this foundation step: editing an existing
+        // draft, confirming, and cancelling do not yet have a server-side
+        // sync handler to receive them (see PurchaseSyncService in
+        // InventoryManagement.Infrastructure.Postgres, which currently
+        // implements Purchase.Create only) - queuing operations with
+        // nowhere to actually go yet would just accumulate Pending rows
+        // the Sync Engine can never successfully process.
+        if (auditAction == AuditAction.Created)
+        {
+            EnqueueCreatePurchaseOutboxOperation(purchase, request);
+        }
+
         await _auditLogger.LogAsync(
             auditAction, nameof(Purchase), purchase.Id,
             $"Purchase '{purchase.PurchaseNumber}' draft saved with {request.Items.Count} item(s).", cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
 
         return Result.Success(await ToDetailByIdAsync(purchase.Id, cancellationToken));
+    }
+
+    private void EnqueueCreatePurchaseOutboxOperation(Purchase purchase, SaveDraftPurchaseRequest request)
+    {
+        var contract = new CreatePurchaseContract(
+            purchase.Id,
+            purchase.SupplierId,
+            purchase.SupplierInvoiceNumber,
+            purchase.PurchaseDate,
+            purchase.Notes,
+            request.Items
+                .Select(i => new PurchaseItemContract(i.ProductId, i.Quantity, i.UnitCost, i.DiscountAmount, i.TaxPercentage))
+                .ToList());
+
+        var payloadJson = JsonSerializer.Serialize(contract);
+
+        // This entity's own Id (assigned at construction, per BaseEntity)
+        // IS the OperationId sent to the server and checked against its
+        // idempotency store - see OutboxOperation's own remarks.
+        _context.OutboxOperations.Add(new OutboxOperation
+        {
+            OperationType = "Purchase.Create",
+            EntityType = nameof(Purchase),
+            EntityId = purchase.Id,
+            PayloadJson = payloadJson,
+            CreatedAtUtc = _dateTimeProvider.UtcNow,
+            Status = OutboxOperationStatus.Pending,
+        });
     }
 
     public async Task<Result> DeleteDraftAsync(Guid purchaseId, CancellationToken cancellationToken = default)
@@ -217,9 +263,10 @@ public sealed class PurchaseService : IPurchaseService
             return Result.Failure("Purchase not found.");
         }
 
-        if (purchase.Status != PurchaseStatus.Draft)
+        var deleteGuard = PurchaseWorkflow.EnsureDeletable(purchase.Status);
+        if (deleteGuard.IsFailure)
         {
-            return Result.Failure($"Only a Draft purchase can be deleted - this purchase is {purchase.Status}.");
+            return Result.Failure(deleteGuard.Error!);
         }
 
         purchase.MarkDeleted(_dateTimeProvider.UtcNow, null);
@@ -249,15 +296,10 @@ public sealed class PurchaseService : IPurchaseService
         // This check is what makes confirming idempotent: once Status is no
         // longer Draft, a second call always fails here before touching any
         // stock, so the same purchase can never have its stock added twice.
-        if (purchase.Status != PurchaseStatus.Draft)
+        var confirmGuard = PurchaseWorkflow.EnsureConfirmable(purchase.Status, purchase.Items.Count);
+        if (confirmGuard.IsFailure)
         {
-            return Result.Failure<PurchaseDetail>(
-                $"Purchase is already {purchase.Status} and cannot be confirmed again.");
-        }
-
-        if (purchase.Items.Count == 0)
-        {
-            return Result.Failure<PurchaseDetail>("Cannot confirm a purchase with no items.");
+            return Result.Failure<PurchaseDetail>(confirmGuard.Error!);
         }
 
         foreach (var item in purchase.Items)
@@ -304,9 +346,10 @@ public sealed class PurchaseService : IPurchaseService
 
         // Same idempotency guard as Confirm - a purchase can only ever be
         // cancelled once.
-        if (purchase.Status == PurchaseStatus.Cancelled)
+        var cancelGuard = PurchaseWorkflow.EnsureCancellable(purchase.Status);
+        if (cancelGuard.IsFailure)
         {
-            return Result.Failure<PurchaseDetail>("Purchase is already cancelled.");
+            return Result.Failure<PurchaseDetail>(cancelGuard.Error!);
         }
 
         if (purchase.Status == PurchaseStatus.Confirmed)
@@ -317,12 +360,11 @@ public sealed class PurchaseService : IPurchaseService
             foreach (var item in purchase.Items)
             {
                 var currentStock = await _inventoryService.GetCurrentStockAsync(item.ProductId, cancellationToken);
-                if (currentStock < item.Quantity)
+
+                var stockGuard = PurchaseWorkflow.EnsureSufficientStockToReverse(currentStock, item.Quantity);
+                if (stockGuard.IsFailure)
                 {
-                    return Result.Failure<PurchaseDetail>(
-                        "Cannot cancel: some of this purchase's stock has already been used elsewhere "
-                            + $"(only {currentStock} of {item.Quantity} remaining for one of the items). "
-                            + "Reduce usage of the affected product(s) before cancelling.");
+                    return Result.Failure<PurchaseDetail>(stockGuard.Error!);
                 }
             }
 
@@ -408,9 +450,10 @@ public sealed class PurchaseService : IPurchaseService
     private async Task<string?> ValidateAsync(
         Guid supplierId, IReadOnlyList<PurchaseItemRequest> items, CancellationToken cancellationToken)
     {
-        if (items.Count == 0)
+        var hasItemsCheck = PurchaseWorkflow.ValidateHasItems(items.Count);
+        if (hasItemsCheck.IsFailure)
         {
-            return "At least one item is required.";
+            return hasItemsCheck.Error;
         }
 
         var supplierExists = await _context.Suppliers.AnyAsync(s => s.Id == supplierId, cancellationToken);
@@ -421,24 +464,11 @@ public sealed class PurchaseService : IPurchaseService
 
         foreach (var item in items)
         {
-            if (item.Quantity <= 0)
+            var shapeCheck = PurchaseWorkflow.ValidateItemShape(
+                item.Quantity, item.UnitCost, item.DiscountAmount, item.TaxPercentage);
+            if (shapeCheck.IsFailure)
             {
-                return "Item quantity must be greater than zero.";
-            }
-
-            if (item.UnitCost < 0)
-            {
-                return "Item unit cost cannot be negative.";
-            }
-
-            if (item.DiscountAmount < 0)
-            {
-                return "Item discount cannot be negative.";
-            }
-
-            if (item.TaxPercentage is < 0 or > 100)
-            {
-                return "Item tax percentage must be between 0 and 100.";
+                return shapeCheck.Error;
             }
 
             var productExists = await _context.Products.AnyAsync(p => p.Id == item.ProductId, cancellationToken);
@@ -453,11 +483,72 @@ public sealed class PurchaseService : IPurchaseService
 
     private async Task<string> GenerateNextPurchaseNumberAsync(CancellationToken cancellationToken)
     {
+        var clientTag = await GetOrCreateClientTagAsync(cancellationToken);
+
         // IgnoreQueryFilters: a soft-deleted draft must still count, or its
-        // number could be issued again to a later purchase, colliding with
-        // the unique index on PurchaseNumber.
+        // sequence number could be issued again to a later purchase on this
+        // SAME install. The client tag (below) is what protects against
+        // collisions ACROSS different installs - this still protects
+        // against collisions within one install, same as before.
         var count = await _context.Purchases.IgnoreQueryFilters().CountAsync(cancellationToken);
-        return $"PO-{count + 1:D5}";
+
+        return PurchaseWorkflow.FormatPurchaseNumber(clientTag, count + 1);
+    }
+
+    /// <summary>
+    /// Decision 3: PurchaseNumber must never collide across offline
+    /// installs, and generating it must never require the API (Decision 4).
+    /// A local-count-only scheme ("PO-00001") - the previous
+    /// implementation - guarantees neither: two different installs both
+    /// start counting from zero. This mints a short, installation-unique
+    /// tag once (from a fresh GUID, entirely locally) and persists it in
+    /// ApplicationSettings (already-existing local key/value table, no new
+    /// table needed), so every purchase number generated on this install
+    /// carries a tag no other install will ever generate. Preferred
+    /// long-term approach per the architecture decision is server-assigned
+    /// authoritative numbering at sync time; this is the interim (and
+    /// possibly durable, pending review) scheme, chosen because it's fully
+    /// self-contained and doesn't leave a purchase number permanently
+    /// showing a placeholder until a sync engine that doesn't exist yet
+    /// gets built - see the migration report for the full rationale.
+    /// </summary>
+    private async Task<string> GetOrCreateClientTagAsync(CancellationToken cancellationToken)
+    {
+        const string settingKey = "ClientInstallationTag";
+
+        var existing = await _context.ApplicationSettings
+            .SingleOrDefaultAsync(s => s.Key == settingKey, cancellationToken);
+
+        if (existing?.Value is { Length: > 0 } value)
+        {
+            return value;
+        }
+
+        var tag = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
+
+        if (existing is not null)
+        {
+            existing.Value = tag;
+        }
+        else
+        {
+            _context.ApplicationSettings.Add(new ApplicationSetting
+            {
+                Key = settingKey,
+                Value = tag,
+                Description = "Short, installation-unique tag used in locally-generated Purchase numbers "
+                    + "(see PurchaseWorkflow.FormatPurchaseNumber) so numbers generated on different "
+                    + "offline installs can never collide. Generated once, on first use.",
+            });
+        }
+
+        // Deliberately not calling SaveChangesAsync here - this setting row
+        // rides along with the same SaveChangesAsync call that commits the
+        // Purchase/PurchaseItems/AuditLog together at the end of
+        // SaveDraftAsync, keeping the whole operation atomic rather than
+        // introducing an early, separate commit.
+
+        return tag;
     }
 
     private async Task<PurchaseDetail> ToDetailByIdAsync(Guid purchaseId, CancellationToken cancellationToken)

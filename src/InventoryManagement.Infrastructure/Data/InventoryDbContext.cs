@@ -1,5 +1,4 @@
 using System.Linq.Expressions;
-using InventoryManagement.Application.Common.Interfaces;
 using InventoryManagement.Domain.Common;
 using InventoryManagement.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -39,6 +38,7 @@ public class InventoryDbContext : DbContext, IAppDbContext
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<ApplicationSetting> ApplicationSettings => Set<ApplicationSetting>();
     public DbSet<BackupRecord> BackupRecords => Set<BackupRecord>();
+    public DbSet<OutboxOperation> OutboxOperations => Set<OutboxOperation>();
 
     public Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default) =>
         Database.BeginTransactionAsync(cancellationToken);

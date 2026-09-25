@@ -4,6 +4,7 @@ using InventoryManagement.Application.Inventory;
 using InventoryManagement.Core.Common;
 using InventoryManagement.Domain.Entities;
 using InventoryManagement.Domain.Enums;
+using InventoryManagement.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace InventoryManagement.Infrastructure.Inventory;

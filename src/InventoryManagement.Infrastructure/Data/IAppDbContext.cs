@@ -3,16 +3,33 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage;
 
-namespace InventoryManagement.Application.Common.Interfaces;
+namespace InventoryManagement.Infrastructure.Data;
 
 /// <summary>
-/// Everything an Application-layer service needs from the database, without
-/// depending on the concrete EF Core DbContext (which lives in Infrastructure).
-/// Deliberately not a full generic-repository abstraction over every entity -
-/// that would just hide EF Core's own (already good) querying API behind a
-/// thinner one. This exists so services can be unit-tested against a fake
-/// implementation and so no Application-layer code needs a project reference
-/// to Infrastructure.
+/// Everything a local (SQLite) service implementation needs from the
+/// database. Lives in Infrastructure, not Application: only
+/// InventoryDbContext implements it, and only Infrastructure-layer service
+/// classes (ProductService, PurchaseService, etc.) consume it. It was
+/// originally placed in Application under the theory that Application-layer
+/// services would depend on it directly - in practice, Application only
+/// ever declares service INTERFACES (IProductService, IPurchaseService),
+/// while the EF Core/SQLite-specific IMPLEMENTATIONS (which are what
+/// actually use this) live in Infrastructure. Keeping this here means
+/// Application has no reason to reference EF Core at all, which matters
+/// now that the same Application-layer service interfaces are meant to be
+/// satisfiable by a future PostgreSQL-backed implementation too (see
+/// InventoryManagement.Infrastructure.Postgres) - that implementation has
+/// no reason to know this interface, or EF Core's SQLite-specific quirks,
+/// exist.
+///
+/// Deliberately not a full generic-repository abstraction over every
+/// entity - that would just hide EF Core's own (already good) querying API
+/// behind a thinner one. This exists so Infrastructure's own services can
+/// be unit-tested against a fake implementation without needing a real
+/// SQLite file, not to hide which persistence technology is in use (that's
+/// the whole point of this being in Infrastructure rather than Application
+/// now - it can openly be EF-Core-shaped, because everything that touches
+/// it already knows it's talking to EF Core/SQLite specifically).
 /// </summary>
 public interface IAppDbContext
 {
@@ -33,6 +50,7 @@ public interface IAppDbContext
     DbSet<AuditLog> AuditLogs { get; }
     DbSet<ApplicationSetting> ApplicationSettings { get; }
     DbSet<BackupRecord> BackupRecords { get; }
+    DbSet<OutboxOperation> OutboxOperations { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 

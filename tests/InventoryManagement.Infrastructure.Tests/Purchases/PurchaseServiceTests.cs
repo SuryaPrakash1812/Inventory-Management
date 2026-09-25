@@ -1,5 +1,7 @@
+using System.Text.Json;
 using InventoryManagement.Application.Inventory;
 using InventoryManagement.Application.Purchases;
+using InventoryManagement.Contracts.Purchases;
 using InventoryManagement.Domain.Entities;
 using InventoryManagement.Domain.Enums;
 using InventoryManagement.Infrastructure.Auth;
@@ -357,5 +359,94 @@ public class PurchaseServiceTests : IDisposable
         var second = await _sut.SaveDraftAsync(MakeDraftRequest());
 
         Assert.NotEqual(first.Value.PurchaseNumber, second.Value.PurchaseNumber);
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_GeneratesPurchaseNumberWithInstallationTag()
+    {
+        // Decision 3: format is PO-<6 char tag>-<5 digit sequence>, e.g.
+        // PO-A1B2C3-00001 - collision-safe across offline installs without
+        // any server coordination, unlike the old local-COUNT-only scheme.
+        var result = await _sut.SaveDraftAsync(MakeDraftRequest());
+
+        Assert.Matches(@"^PO-[0-9A-F]{6}-\d{5}$", result.Value.PurchaseNumber);
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_ReusesTheSameInstallationTag_AcrossMultiplePurchases()
+    {
+        var first = await _sut.SaveDraftAsync(MakeDraftRequest());
+        var second = await _sut.SaveDraftAsync(MakeDraftRequest());
+
+        var firstTag = first.Value.PurchaseNumber.Split('-')[1];
+        var secondTag = second.Value.PurchaseNumber.Split('-')[1];
+
+        Assert.Equal(firstTag, secondTag);
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_PersistsTheInstallationTag_AsAnApplicationSetting()
+    {
+        await _sut.SaveDraftAsync(MakeDraftRequest());
+
+        var setting = await _context.ApplicationSettings.SingleOrDefaultAsync(s => s.Key == "ClientInstallationTag");
+
+        Assert.NotNull(setting);
+        Assert.False(string.IsNullOrWhiteSpace(setting!.Value));
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_NewPurchase_AtomicallyQueuesAnOutboxOperation()
+    {
+        // Decision 8: a brand-new purchase's business data and its Outbox
+        // entry are committed in the SAME transaction - this test verifies
+        // the observable result (both exist afterward), which is the part
+        // that actually matters; true all-or-nothing atomicity additionally
+        // depends on SQLite's own transactional guarantees for a single
+        // SaveChangesAsync call, which this test does not need to
+        // separately prove.
+        var result = await _sut.SaveDraftAsync(MakeDraftRequest());
+
+        var outboxOperations = await _context.OutboxOperations
+            .Where(o => o.EntityId == result.Value.Id)
+            .ToListAsync();
+
+        var operation = Assert.Single(outboxOperations);
+        Assert.Equal("Purchase.Create", operation.OperationType);
+        Assert.Equal(nameof(Purchase), operation.EntityType);
+        Assert.Equal(OutboxOperationStatus.Pending, operation.Status);
+        Assert.False(string.IsNullOrWhiteSpace(operation.PayloadJson));
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_OutboxPayload_DeserializesToTheSubmittedItems()
+    {
+        var result = await _sut.SaveDraftAsync(MakeDraftRequest(quantity: 7, unitCost: 12));
+
+        var operation = await _context.OutboxOperations.SingleAsync(o => o.EntityId == result.Value.Id);
+        var contract = JsonSerializer.Deserialize<CreatePurchaseContract>(operation.PayloadJson);
+
+        Assert.NotNull(contract);
+        Assert.Equal(result.Value.Id, contract!.PurchaseId);
+        Assert.Equal(_supplier.Id, contract.SupplierId);
+        var item = Assert.Single(contract.Items);
+        Assert.Equal(7m, item.Quantity);
+        Assert.Equal(12m, item.UnitCost);
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_EditingAnExistingDraft_DoesNotQueueAnAdditionalOutboxOperation()
+    {
+        // Only Purchase.Create is queued in this foundation step - editing
+        // a draft has no server-side sync handler yet to receive it (see
+        // PurchaseService.EnqueueCreatePurchaseOutboxOperation's remarks).
+        var created = await _sut.SaveDraftAsync(MakeDraftRequest());
+        await _sut.SaveDraftAsync(MakeDraftRequest(created.Value.Id, quantity: 20));
+
+        var outboxOperations = await _context.OutboxOperations
+            .Where(o => o.EntityId == created.Value.Id)
+            .ToListAsync();
+
+        Assert.Single(outboxOperations);
     }
 }

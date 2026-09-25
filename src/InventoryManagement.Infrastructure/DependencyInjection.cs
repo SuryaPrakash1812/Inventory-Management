@@ -52,6 +52,13 @@ public static class DependencyInjection
         // Application-layer code depends on the interface, never the concrete type.
         services.AddScoped<IAppDbContext>(sp => sp.GetRequiredService<InventoryDbContext>());
 
+        // Decision 10: a SEPARATE way to get a short-lived InventoryDbContext,
+        // for the Sync Engine only - see SyncDbContextFactory's remarks on why
+        // this is not EF Core's AddDbContextFactory helper. Registered as a
+        // singleton since it holds no per-request state itself - it only
+        // creates brand-new context instances on demand.
+        services.AddSingleton<ISyncDbContextFactory, SyncDbContextFactory>();
+
         services.AddScoped<IDatabaseInitializer, DatabaseInitializer>();
 
         // Auth: password hashing and the authorization check are stateless

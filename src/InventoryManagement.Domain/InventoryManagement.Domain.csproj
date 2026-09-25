@@ -12,6 +12,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="InventoryManagement.Domain.Tests" />
     <InternalsVisibleTo Include="InventoryManagement.Infrastructure" />
+    <InternalsVisibleTo Include="InventoryManagement.Infrastructure.Postgres" />
   </ItemGroup>
 
 </Project>
