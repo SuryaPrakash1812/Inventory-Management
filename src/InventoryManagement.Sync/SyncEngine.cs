@@ -1,3 +1,5 @@
+using System.Text.Json;
+using InventoryManagement.Contracts.Purchases;
 using InventoryManagement.Contracts.Sync;
 using InventoryManagement.Sync.Api;
 using InventoryManagement.Sync.Connectivity;
@@ -57,6 +59,37 @@ public sealed class SyncEngine : ISyncEngine
 
                 if (response.Outcome is SyncOperationOutcome.Processed or SyncOperationOutcome.AlreadyProcessed)
                 {
+                    // Decision: "Local Purchase is updated with
+                    // authoritative server information where necessary" -
+                    // the user should never keep seeing their offline
+                    // interim number after the real one exists. A missing
+                    // or unparseable ResultJson is treated as a sync
+                    // success without a number update rather than a
+                    // failure - the purchase itself was genuinely created
+                    // server-side either way, and a display-only field
+                    // being briefly stale is a much smaller problem than
+                    // marking a successful sync as failed and retrying it
+                    // forever.
+                    if (response.ResultJson is { Length: > 0 } resultJson)
+                    {
+                        try
+                        {
+                            var result = JsonSerializer.Deserialize<PurchaseSyncResultContract>(resultJson);
+                            if (result is not null)
+                            {
+                                await _outboxProcessor.ApplyServerPurchaseNumberAsync(
+                                    result.PurchaseId, result.ServerPurchaseNumber, cancellationToken);
+                            }
+                        }
+                        catch (JsonException)
+                        {
+                            // Malformed result payload - the sync itself
+                            // still succeeded (see remarks above), so this
+                            // is deliberately swallowed rather than failing
+                            // the whole operation.
+                        }
+                    }
+
                     await _outboxProcessor.MarkSyncedAsync(operation.Id, cancellationToken);
                     succeeded++;
                 }
@@ -70,10 +103,13 @@ public sealed class SyncEngine : ISyncEngine
             catch (Exception ex)
             {
                 // Network failure, timeout, or anything else unexpected -
-                // marked Failed (with RetryCount incremented) rather than
-                // left Pending forever unexplained. No retry/backoff
-                // scheduling here yet - that is complete-Sync-Engine work.
-                await _outboxProcessor.MarkFailedAsync(operation.Id, ex.Message, cancellationToken);
+                // treated as TRANSIENT: returned to Pending with RetryCount
+                // incremented, so a later sync run (after backoff) tries
+                // again automatically, per "transient failure: retry using
+                // controlled backoff." Distinct from a ValidationFailed
+                // response above, which is a permanent business rejection
+                // and must not be retried the same way.
+                await _outboxProcessor.MarkTransientFailureAsync(operation.Id, ex.Message, cancellationToken);
                 failed++;
             }
         }

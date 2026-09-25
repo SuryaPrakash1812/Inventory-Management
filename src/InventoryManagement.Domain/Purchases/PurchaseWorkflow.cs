@@ -129,4 +129,17 @@ public static class PurchaseWorkflow
     /// for where the tag and sequence come from.
     /// </summary>
     public static string FormatPurchaseNumber(string clientTag, int sequence) => $"PO-{clientTag}-{sequence:D5}";
+
+    /// <summary>
+    /// The AUTHORITATIVE, server-side format - distinct from
+    /// FormatPurchaseNumber above (which is the client's offline-safe
+    /// interim scheme). Deliberately visually distinguishable at a glance
+    /// (a 4-digit year instead of a 6-character hex tag) so a synced
+    /// purchase's final number never looks like it could be confused with
+    /// an unsynchronized local one. See
+    /// PostgresSequencePurchaseNumberGenerator.GenerateAsync for where the
+    /// sequence value itself comes from (a PostgreSQL SEQUENCE - see that
+    /// method's remarks on why this must never be a local COUNT).
+    /// </summary>
+    public static string FormatServerPurchaseNumber(int year, long sequence) => $"PO-{year}-{sequence:D6}";
 }

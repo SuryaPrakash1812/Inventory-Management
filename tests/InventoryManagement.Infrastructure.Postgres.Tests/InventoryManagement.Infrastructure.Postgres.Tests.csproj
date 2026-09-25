@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>InventoryManagement.Infrastructure.Postgres.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="coverlet.collector" Version="6.0.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <!--
+      EF Core's InMemory provider, used ONLY for the idempotency tests in
+      this project - see PurchaseSyncServiceIdempotencyTests's own remarks
+      on why that specific choice is justified (the check-then-record
+      pattern being tested is provider-agnostic) and what it deliberately
+      does NOT attempt to verify (anything Postgres-specific: xmin
+      concurrency, the purchase_number_seq sequence, real transaction
+      isolation). Those need a real PostgreSQL instance and are NOT
+      covered by this project - see the migration report's Known
+      Limitations.
+    -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\InventoryManagement.Contracts\InventoryManagement.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\InventoryManagement.Domain\InventoryManagement.Domain.csproj" />
+    <ProjectReference Include="..\..\src\InventoryManagement.Infrastructure.Postgres\InventoryManagement.Infrastructure.Postgres.csproj" />
+  </ItemGroup>
+
+</Project>

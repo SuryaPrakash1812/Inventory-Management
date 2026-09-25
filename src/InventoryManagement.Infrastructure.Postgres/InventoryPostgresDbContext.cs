@@ -45,5 +45,19 @@ public class InventoryPostgresDbContext : DbContext
         base.OnModelCreating(modelBuilder);
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(InventoryPostgresDbContext).Assembly);
+
+        // CRITICAL FIX: authoritative PurchaseNumber generation must be
+        // concurrency-safe under real concurrent request load - a
+        // COUNT(*) + 1 scheme (the previous implementation) has a race
+        // window between two simultaneous requests that both read the same
+        // count before either has inserted, producing duplicate numbers.
+        // A PostgreSQL sequence's nextval() is atomic at the database
+        // level - two concurrent callers are GUARANTEED distinct values,
+        // no application-level locking required. See
+        // PostgresSequencePurchaseNumberGenerator for where
+        // this is consumed.
+        modelBuilder.HasSequence<long>("purchase_number_seq")
+            .StartsAt(1)
+            .IncrementsBy(1);
     }
 }

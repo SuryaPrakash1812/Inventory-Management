@@ -35,11 +35,16 @@ public sealed class PurchaseSyncService
 {
     private readonly InventoryPostgresDbContext _context;
     private readonly IIdempotencyStore _idempotencyStore;
+    private readonly IPurchaseNumberGenerator _purchaseNumberGenerator;
 
-    public PurchaseSyncService(InventoryPostgresDbContext context, IIdempotencyStore idempotencyStore)
+    public PurchaseSyncService(
+        InventoryPostgresDbContext context,
+        IIdempotencyStore idempotencyStore,
+        IPurchaseNumberGenerator purchaseNumberGenerator)
     {
         _context = context;
         _idempotencyStore = idempotencyStore;
+        _purchaseNumberGenerator = purchaseNumberGenerator;
     }
 
     public async Task<SyncOperationResponse> CreatePurchaseAsync(
@@ -124,7 +129,7 @@ public sealed class PurchaseSyncService
         }
 
         var headerTotals = PurchaseWorkflow.ComputeHeaderTotals(lineComputations);
-        var purchaseNumber = await GenerateServerPurchaseNumberAsync(cancellationToken);
+        var purchaseNumber = await _purchaseNumberGenerator.GenerateAsync(cancellationToken);
 
         var purchase = new Purchase
         {
@@ -169,23 +174,6 @@ public sealed class PurchaseSyncService
         await _context.SaveChangesAsync(cancellationToken);
 
         return new SyncOperationResponse(request.OperationId, SyncOperationOutcome.Processed, null, resultJson);
-    }
-
-    /// <summary>
-    /// Simple sequential scheme for this foundation step - matches the
-    /// existing local scheme's shape (see PurchaseService.
-    /// GenerateNextPurchaseNumberAsync's remarks) but with a server-specific
-    /// tag rather than a per-install one, since exactly one server exists.
-    /// Under genuinely concurrent request load, a COUNT-then-insert has a
-    /// narrow race window between two simultaneous requests; a real
-    /// Postgres SEQUENCE would close that window entirely and is the
-    /// natural next refinement, deliberately not built out in this
-    /// foundation step.
-    /// </summary>
-    private async Task<string> GenerateServerPurchaseNumberAsync(CancellationToken cancellationToken)
-    {
-        var count = await _context.Purchases.IgnoreQueryFilters().CountAsync(cancellationToken);
-        return PurchaseWorkflow.FormatPurchaseNumber("SRV", count + 1);
     }
 
     private static SyncOperationResponse Failure(Guid operationId, string errorMessage) =>

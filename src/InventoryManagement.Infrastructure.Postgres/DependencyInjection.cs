@@ -19,6 +19,7 @@ public static class DependencyInjection
             options.UseNpgsql(connectionString));
 
         services.AddScoped<IIdempotencyStore, IdempotencyStore>();
+        services.AddScoped<IPurchaseNumberGenerator, PostgresSequencePurchaseNumberGenerator>();
         services.AddScoped<PurchaseSyncService>();
 
         return services;

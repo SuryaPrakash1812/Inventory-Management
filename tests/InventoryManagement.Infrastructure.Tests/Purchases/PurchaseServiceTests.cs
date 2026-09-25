@@ -451,4 +451,49 @@ public class PurchaseServiceTests : IDisposable
 
         Assert.Single(outboxOperations);
     }
+
+    [Fact]
+    public async Task SaveDraftAsync_ValidationFailure_CreatesNeitherAPurchaseNorAnOutboxOperation()
+    {
+        // Local rollback/atomicity: a request that fails validation must
+        // leave the database exactly as it was - no partial Purchase, and
+        // critically, no "orphan" Outbox operation for a purchase that was
+        // never actually saved. ValidateAsync runs and can fail before
+        // ChangeTracker ever tracks anything new, so there is nothing for
+        // SaveChangesAsync to even attempt to commit.
+        var invalidRequest = MakeDraftRequest(quantity: -1); // fails ValidateItemShape
+
+        var purchaseCountBefore = await _context.Purchases.IgnoreQueryFilters().CountAsync();
+        var outboxCountBefore = await _context.OutboxOperations.CountAsync();
+
+        var result = await _sut.SaveDraftAsync(invalidRequest);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(purchaseCountBefore, await _context.Purchases.IgnoreQueryFilters().CountAsync());
+        Assert.Equal(outboxCountBefore, await _context.OutboxOperations.CountAsync());
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_NewPurchase_NeverProducesAnOutboxOperationWithoutAMatchingPurchase()
+    {
+        // The inverse of the atomicity guarantee above, checked across
+        // several creates: every OutboxOperation for a Purchase.Create
+        // must reference a Purchase that genuinely exists.
+        await _sut.SaveDraftAsync(MakeDraftRequest());
+        await _sut.SaveDraftAsync(MakeDraftRequest());
+        await _sut.SaveDraftAsync(MakeDraftRequest());
+
+        var createOperations = await _context.OutboxOperations
+            .Where(o => o.OperationType == "Purchase.Create")
+            .ToListAsync();
+
+        foreach (var operation in createOperations)
+        {
+            var purchaseExists = await _context.Purchases
+                .IgnoreQueryFilters()
+                .AnyAsync(p => p.Id == operation.EntityId);
+
+            Assert.True(purchaseExists, $"OutboxOperation {operation.Id} references a Purchase that does not exist.");
+        }
+    }
 }
