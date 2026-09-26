@@ -5,6 +5,7 @@ using InventoryManagement.Application.Customers;
 using InventoryManagement.Application.Inventory;
 using InventoryManagement.Application.Products;
 using InventoryManagement.Application.Purchases;
+using InventoryManagement.Application.Sales;
 using InventoryManagement.Application.StockAdjustments;
 using InventoryManagement.Application.Settings;
 using InventoryManagement.Application.Suppliers;
@@ -18,6 +19,7 @@ using InventoryManagement.Infrastructure.Data.Interceptors;
 using InventoryManagement.Infrastructure.Inventory;
 using InventoryManagement.Infrastructure.Products;
 using InventoryManagement.Infrastructure.Purchases;
+using InventoryManagement.Infrastructure.Sales;
 using InventoryManagement.Infrastructure.StockAdjustments;
 using InventoryManagement.Infrastructure.Settings;
 using InventoryManagement.Infrastructure.Suppliers;
@@ -86,6 +88,7 @@ public static class DependencyInjection
         services.AddScoped<IInventoryService, InventoryService>();
         services.AddScoped<IPurchaseService, PurchaseService>();
         services.AddScoped<IStockAdjustmentService, StockAdjustmentService>();
+        services.AddScoped<ISaleService, SaleService>();
 
         return services;
     }
