@@ -1,5 +1,6 @@
 using InventoryManagement.App.ViewModels;
 using InventoryManagement.App.ViewModels.Auth;
+using InventoryManagement.App.ViewModels.Backup;
 using InventoryManagement.App.ViewModels.Categories;
 using InventoryManagement.App.ViewModels.Customers;
 using InventoryManagement.App.ViewModels.Dashboard;
@@ -70,6 +71,7 @@ public static class DependencyInjection
         services.AddTransient<ReportsPage>();
         services.AddTransient<ReportsViewModel>();
         services.AddTransient<BackupPage>();
+        services.AddTransient<BackupViewModel>();
 
         services.AddTransient<UsersPage>();
         services.AddTransient<UsersViewModel>();

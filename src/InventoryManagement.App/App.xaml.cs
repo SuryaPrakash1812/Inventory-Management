@@ -11,6 +11,7 @@ using InventoryManagement.Application.Auth;
 using InventoryManagement.Application.Common.Interfaces;
 using InventoryManagement.Application.Settings;
 using InventoryManagement.Infrastructure;
+using InventoryManagement.Infrastructure.Common;
 using InventoryManagement.Infrastructure.Logging;
 using InventoryManagement.Sync;
 using InventoryManagement.Sync.Connectivity;
@@ -58,6 +59,8 @@ public partial class App : WpfApplication
         try
         {
             Log.Information("Application starting up");
+
+            ApplyStagedRestoreIfPending();
 
             _host = Host.CreateDefaultBuilder()
                 .UseSerilog()
@@ -260,6 +263,58 @@ public partial class App : WpfApplication
                 }
             });
         };
+    }
+
+    /// <summary>
+    /// Applies a staged restore, if one exists, BEFORE any database
+    /// connection is opened - this is what makes restore safe with this
+    /// application's single long-lived connection per session. See
+    /// BackupService.StageRestoreAsync's remarks: a restore never touches
+    /// the live database file while the app is running, only writes a
+    /// ".pending-restore" file alongside it. This runs at the very start
+    /// of every launch, finds that file if the user requested a restore
+    /// last session, and only then does the actual file swap - at a point
+    /// where nothing else has the database open yet, making the swap
+    /// completely safe.
+    /// </summary>
+    private static void ApplyStagedRestoreIfPending()
+    {
+        var stagedPath = AppPaths.DatabaseFilePath + Infrastructure.Backup.BackupService.PendingRestoreSuffix;
+
+        if (!File.Exists(stagedPath))
+        {
+            return;
+        }
+
+        try
+        {
+            Log.Information("Pending restore found at {StagedPath} - applying before opening the database", stagedPath);
+
+            // SQLite WAL mode leaves -wal/-shm sidecar files alongside the
+            // main database file - these must be removed too, or the
+            // restored file could be reconciled against stale WAL data
+            // from before the restore, defeating the point of restoring.
+            foreach (var suffix in new[] { string.Empty, "-wal", "-shm" })
+            {
+                var path = AppPaths.DatabaseFilePath + suffix;
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
+
+            File.Move(stagedPath, AppPaths.DatabaseFilePath);
+
+            Log.Information("Restore applied successfully");
+        }
+        catch (Exception ex)
+        {
+            // A failed restore must not prevent the app from starting at
+            // all - log it clearly and leave the staged file in place so
+            // the user can see something is wrong and try again, rather
+            // than silently losing their restore request.
+            Log.Error(ex, "Failed to apply staged restore - the application will start with the existing database");
+        }
     }
 
     private void RegisterGlobalExceptionHandlers()

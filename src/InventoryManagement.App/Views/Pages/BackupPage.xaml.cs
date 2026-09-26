@@ -1,17 +1,28 @@
 using System.Windows.Controls;
-using InventoryManagement.App.ViewModels;
+using System.Windows.Input;
+using InventoryManagement.App.ViewModels.Backup;
 
 namespace InventoryManagement.App.Views.Pages;
 
-/// <summary>
-/// Placeholder page for Backup. Local and cloud backup/restore arrive in Stages 11-12 (Backup engine and Cloud providers).
-/// </summary>
 public partial class BackupPage : Page
 {
-    public BackupPage()
+    private readonly BackupViewModel _viewModel;
+
+    public BackupPage(BackupViewModel viewModel)
     {
+        _viewModel = viewModel;
         InitializeComponent();
 
-        DataContext = new PlaceholderViewModel("Backup", "Local and cloud backup/restore arrive in Stages 11-12 (Backup engine and Cloud providers).");
+        DataContext = viewModel;
+
+        Loaded += async (_, _) => await viewModel.InitializeAsync();
+
+        PreviewMouseWheel += OnPreviewMouseWheel;
+    }
+
+    private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        BackupScrollViewer.ScrollToVerticalOffset(BackupScrollViewer.VerticalOffset - e.Delta);
+        e.Handled = true;
     }
 }

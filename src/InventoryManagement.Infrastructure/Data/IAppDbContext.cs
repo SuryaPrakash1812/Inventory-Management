@@ -1,6 +1,7 @@
 using InventoryManagement.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 
 namespace InventoryManagement.Infrastructure.Data;
@@ -91,4 +92,13 @@ public interface IAppDbContext
     /// partway through a multi-step, inventory-affecting operation.
     /// </summary>
     Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Exposes EF Core's DatabaseFacade directly, needed by BackupService
+    /// to run VACUUM INTO via ExecuteSqlRawAsync - a raw SQL command with
+    /// no LINQ/entity equivalent. InventoryDbContext satisfies this
+    /// automatically via the DbContext.Database property it already
+    /// inherits - no implementation needed there.
+    /// </summary>
+    DatabaseFacade Database { get; }
 }

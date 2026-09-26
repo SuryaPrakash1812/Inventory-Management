@@ -1,4 +1,5 @@
 using InventoryManagement.Application.Auth;
+using InventoryManagement.Application.Backup;
 using InventoryManagement.Application.Categories;
 using InventoryManagement.Application.Common.Interfaces;
 using InventoryManagement.Application.Customers;
@@ -11,6 +12,7 @@ using InventoryManagement.Application.Settings;
 using InventoryManagement.Application.Suppliers;
 using InventoryManagement.Application.Users;
 using InventoryManagement.Infrastructure.Auth;
+using InventoryManagement.Infrastructure.Backup;
 using InventoryManagement.Infrastructure.Categories;
 using InventoryManagement.Infrastructure.Common;
 using InventoryManagement.Infrastructure.Customers;
@@ -89,6 +91,7 @@ public static class DependencyInjection
         services.AddScoped<IPurchaseService, PurchaseService>();
         services.AddScoped<IStockAdjustmentService, StockAdjustmentService>();
         services.AddScoped<ISaleService, SaleService>();
+        services.AddScoped<IBackupService, BackupService>();
 
         return services;
     }
