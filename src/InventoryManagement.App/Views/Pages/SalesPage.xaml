@@ -1,7 +1,204 @@
 <Page x:Class="InventoryManagement.App.Views.Pages.SalesPage"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      xmlns:views="clr-namespace:InventoryManagement.App.Views"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       Title="Sales">
-    <views:PlaceholderView />
+    <Grid Margin="20">
+
+        <!-- LIST VIEW -->
+        <ScrollViewer x:Name="ListScrollViewer"
+                      Visibility="{Binding IsShowingList, Converter={StaticResource BoolToVisibility}}"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalContentAlignment="Stretch"
+                      Background="Transparent"
+                      PanningMode="VerticalOnly">
+            <Grid Background="Transparent">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+                    <ui:Button Content="New Sale" Command="{Binding StartCreateCommand}" Appearance="Primary" />
+                </WrapPanel>
+
+                <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
+                    <ui:TextBox Text="{Binding SearchTerm, UpdateSourceTrigger=PropertyChanged}"
+                                PlaceholderText="Search by sale # or invoice #"
+                                Width="240"
+                                Margin="0,0,16,8">
+                        <ui:TextBox.InputBindings>
+                            <KeyBinding Key="Enter" Command="{Binding SearchCommand}" />
+                        </ui:TextBox.InputBindings>
+                    </ui:TextBox>
+
+                    <ui:TextBlock Text="Customer:" VerticalAlignment="Center" Margin="0,0,8,8" />
+                    <ComboBox ItemsSource="{Binding Customers}"
+                              SelectedItem="{Binding SelectedCustomerFilter}"
+                              DisplayMemberPath="Name"
+                              MinWidth="160"
+                              Margin="0,0,16,8" />
+
+                    <ui:TextBlock Text="Status:" VerticalAlignment="Center" Margin="0,0,8,8" />
+                    <ComboBox ItemsSource="{Binding StatusFilterOptions}"
+                              SelectedItem="{Binding SelectedStatusFilter}"
+                              MinWidth="110"
+                              Margin="0,0,16,8" />
+
+                    <ui:Button Content="Search" Command="{Binding SearchCommand}" Appearance="Primary" Margin="0,0,8,8" />
+                    <ui:Button Content="Clear Filters" Command="{Binding ClearFiltersCommand}" Margin="0,0,0,8" />
+                </WrapPanel>
+
+                <DataGrid Grid.Row="2"
+                          ItemsSource="{Binding Sales}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          CanUserAddRows="False"
+                          MinHeight="200">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Sale #" Binding="{Binding SaleNumber}" Width="120" />
+                        <DataGridTextColumn Header="Invoice #" Binding="{Binding InvoiceNumber}" Width="120" />
+                        <DataGridTextColumn Header="Customer" Binding="{Binding CustomerName}" Width="180" />
+                        <DataGridTextColumn Header="Date" Binding="{Binding SaleDate, StringFormat=d}" Width="100" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="90" />
+                        <DataGridTextColumn Header="Total" Binding="{Binding TotalAmount, StringFormat=N2}" Width="100" />
+                        <DataGridTemplateColumn Header="" Width="90">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <ui:Button Content="Open"
+                                               Command="{Binding DataContext.StartViewCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                               CommandParameter="{Binding}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <WrapPanel Grid.Row="3" Orientation="Horizontal" Margin="0,12,0,0">
+                    <ui:Button Content="Previous" Command="{Binding PreviousPageCommand}" Margin="0,0,8,0" />
+                    <ui:TextBlock VerticalAlignment="Center" Margin="0,0,8,0">
+                        <Run Text="Page" /> <Run Text="{Binding PageNumber, Mode=OneWay}" /> <Run Text="of" /> <Run Text="{Binding TotalPages, Mode=OneWay}" />
+                        <Run Text="(" /><Run Text="{Binding TotalCount, Mode=OneWay}" /> <Run Text="total)" />
+                    </ui:TextBlock>
+                    <ui:Button Content="Next" Command="{Binding NextPageCommand}" Margin="0,0,16,0" />
+                    <ui:TextBlock Text="{Binding StatusMessage}" Foreground="Green" VerticalAlignment="Center" />
+                </WrapPanel>
+            </Grid>
+        </ScrollViewer>
+
+        <!-- DETAIL VIEW -->
+        <ScrollViewer x:Name="DetailScrollViewer"
+                      Visibility="{Binding IsViewingDetail, Converter={StaticResource BoolToVisibility}}"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalContentAlignment="Stretch"
+                      Background="Transparent"
+                      PanningMode="VerticalOnly">
+            <Grid Background="Transparent">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
+                    <ui:Button Content="Back to list" Command="{Binding CancelEditCommand}" Margin="0,0,16,0" />
+                    <ui:TextBlock Text="{Binding SaleNumberDisplay}" FontTypography="TitleLarge" VerticalAlignment="Center" />
+                    <ui:TextBlock Text="{Binding InvoiceNumberDisplay}" Margin="8,0,0,0" VerticalAlignment="Center" Opacity="0.7" />
+                    <ui:TextBlock Text="{Binding CurrentStatus}" Margin="16,0,0,0" VerticalAlignment="Center" Opacity="0.7" />
+                </StackPanel>
+
+                <ui:TextBlock Grid.Row="1" Text="{Binding ErrorMessage}" Foreground="IndianRed" TextWrapping="Wrap" Margin="0,0,0,12" />
+
+                <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,16">
+                    <StackPanel Margin="0,0,24,0">
+                        <ui:TextBlock Text="Customer" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                        <ComboBox ItemsSource="{Binding Customers}" SelectedItem="{Binding FormCustomer}"
+                                  DisplayMemberPath="Name" IsEnabled="{Binding CanEditFields}" Width="200" />
+                    </StackPanel>
+                    <StackPanel Margin="0,0,24,0">
+                        <ui:TextBlock Text="Sale Date" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                        <DatePicker SelectedDate="{Binding FormSaleDate}" IsEnabled="{Binding CanEditFields}" Width="160" />
+                    </StackPanel>
+                    <StackPanel Width="320">
+                        <ui:TextBlock Text="Notes" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                        <ui:TextBox Text="{Binding FormNotes}" IsEnabled="{Binding CanEditFields}" />
+                    </StackPanel>
+                </WrapPanel>
+
+                <StackPanel Grid.Row="3" Visibility="{Binding CanEditFields, Converter={StaticResource BoolToVisibility}}" Margin="0,0,0,12">
+                    <ui:TextBlock Text="Add product" FontTypography="Caption" Opacity="0.6" Margin="0,0,0,4" />
+                    <StackPanel Orientation="Horizontal">
+                        <ui:TextBox Text="{Binding ProductSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                    PlaceholderText="Scan or type SKU, barcode, or name"
+                                    Width="280"
+                                    Margin="0,0,8,0">
+                            <ui:TextBox.InputBindings>
+                                <KeyBinding Key="Enter" Command="{Binding AddLineItemCommand}" />
+                            </ui:TextBox.InputBindings>
+                        </ui:TextBox>
+                        <ui:Button Content="Add" Command="{Binding AddLineItemCommand}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <DataGrid Grid.Row="4"
+                          ItemsSource="{Binding LineItems}"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="{Binding IsReadOnlyLineItems}"
+                          CanUserAddRows="False"
+                          MinHeight="160"
+                          Margin="0,0,0,12">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="100" IsReadOnly="True" />
+                        <DataGridTextColumn Header="Product" Binding="{Binding Name}" Width="200" IsReadOnly="True" />
+                        <DataGridTextColumn Header="Quantity" Binding="{Binding Quantity, StringFormat=N2}" Width="90" />
+                        <DataGridTextColumn Header="Unit Price" Binding="{Binding UnitPrice, StringFormat=N2}" Width="100" />
+                        <DataGridTextColumn Header="Discount" Binding="{Binding DiscountAmount, StringFormat=N2}" Width="100" />
+                        <DataGridTextColumn Header="Line Total" Binding="{Binding LineTotal, StringFormat=N2}" Width="100" IsReadOnly="True" />
+                        <DataGridTemplateColumn Header="" Width="80">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <ui:Button Content="Remove"
+                                               Command="{Binding DataContext.RemoveLineItemCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                               CommandParameter="{Binding}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <WrapPanel Grid.Row="5" Orientation="Horizontal" Margin="0,0,0,16" HorizontalAlignment="Right">
+                    <ui:TextBlock Margin="0,0,16,0">
+                        <Run Text="Subtotal:" /> <Run Text="{Binding FormSubtotal, StringFormat=N2, Mode=OneWay}" />
+                    </ui:TextBlock>
+                    <ui:TextBlock Margin="0,0,16,0">
+                        <Run Text="Discount:" /> <Run Text="{Binding FormDiscountTotal, StringFormat=N2, Mode=OneWay}" />
+                    </ui:TextBlock>
+                    <ui:TextBlock FontTypography="BodyStrong">
+                        <Run Text="Total:" /> <Run Text="{Binding FormTotal, StringFormat=N2, Mode=OneWay}" />
+                    </ui:TextBlock>
+                </WrapPanel>
+
+                <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Left">
+                    <ui:Button Content="Save Draft" Command="{Binding SaveDraftCommand}" Appearance="Primary"
+                               Visibility="{Binding CanEditFields, Converter={StaticResource BoolToVisibility}}"
+                               IsEnabled="{Binding IsNotBusy}" Margin="0,0,8,0" />
+                    <ui:Button Content="Invoice" Command="{Binding InvoiceCommand}"
+                               Visibility="{Binding CanInvoice, Converter={StaticResource BoolToVisibility}}"
+                               IsEnabled="{Binding IsNotBusy}" Margin="0,0,8,0" />
+                    <ui:Button Content="Cancel Sale" Command="{Binding CancelSaleCommand}"
+                               Visibility="{Binding CanCancel, Converter={StaticResource BoolToVisibility}}"
+                               IsEnabled="{Binding IsNotBusy}" Margin="0,0,8,0" />
+                    <ui:Button Content="Delete Draft" Command="{Binding DeleteDraftCommand}"
+                               Visibility="{Binding CanDelete, Converter={StaticResource BoolToVisibility}}"
+                               IsEnabled="{Binding IsNotBusy}" />
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+    </Grid>
 </Page>
