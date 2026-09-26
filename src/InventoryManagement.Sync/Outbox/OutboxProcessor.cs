@@ -29,10 +29,18 @@ public sealed class OutboxProcessor : IOutboxProcessor
     {
         await using var context = _dbContextFactory.CreateDbContext();
 
-        var candidates = await context.OutboxOperations
+        // OrderBy happens AFTER ToListAsync (in-memory), not before it -
+        // SQLite's EF Core provider cannot translate ORDER BY on a
+        // DateTimeOffset column into SQL. This is the exact same
+        // limitation already documented and worked around in
+        // PurchaseService.GetPurchasesAsync and ProductService.
+        // GetProductsAsync - this call site had the identical bug, just
+        // never exercised until a test actually asserted on ordering.
+        var candidates = (await context.OutboxOperations
             .Where(o => o.Status == OutboxOperationStatus.Pending)
+            .ToListAsync(cancellationToken))
             .OrderBy(o => o.CreatedAtUtc)
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         var now = DateTimeOffset.UtcNow;
 

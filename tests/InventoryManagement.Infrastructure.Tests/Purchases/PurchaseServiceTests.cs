@@ -449,10 +449,17 @@ public class PurchaseServiceTests : IDisposable
         var created = await _sut.SaveDraftAsync(MakeDraftRequest());
         await _sut.SaveDraftAsync(MakeDraftRequest(created.Value.Id, quantity: 20));
 
-        var outboxOperations = await _context.OutboxOperations
+        var outboxOperations = (await _context.OutboxOperations
             .Where(o => o.EntityId == created.Value.Id)
+            .ToListAsync())
+            // In-memory sort: SQLite's EF Core provider cannot translate
+            // ORDER BY on a DateTimeOffset column into SQL - the exact same
+            // limitation already documented and worked around in
+            // PurchaseService.GetPurchasesAsync and ProductService.
+            // GetProductsAsync. Same fix here: materialize first, sort
+            // client-side.
             .OrderBy(o => o.CreatedAtUtc)
-            .ToListAsync();
+            .ToList();
 
         Assert.Equal(2, outboxOperations.Count);
         Assert.Equal("Purchase.Create", outboxOperations[0].OperationType);
