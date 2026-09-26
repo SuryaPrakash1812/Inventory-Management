@@ -117,7 +117,9 @@ public partial class App : WpfApplication
             // theme followed by a switch to the user's actual preference.
             var settingsService = _appScope.ServiceProvider.GetRequiredService<ISettingsService>();
             await settingsService.LoadAsync();
-            ThemeApplier.Apply(settingsService.Current.Theme);
+            // Theme toggling is disabled - always Light, regardless of any
+            // previously saved preference.
+            ThemeApplier.Apply(ThemeMode.Light);
 
             WeakReferenceMessenger.Default.Register<LogoutRequestedMessage>(this, OnLogoutRequested);
 

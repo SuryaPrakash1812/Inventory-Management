@@ -28,7 +28,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
     {
         _settingsService = settingsService;
 
-        _selectedTheme = settingsService.Current.Theme;
+        // Theme toggling is disabled - always shows/uses Light, regardless
+        // of whatever was previously saved.
+        _selectedTheme = ThemeMode.Light;
     }
 
     partial void OnSelectedThemeChanged(ThemeMode value)

@@ -46,6 +46,7 @@
                                 VerticalAlignment="Center">
                         <ui:Button Content="Toggle theme"
                                    Command="{Binding ToggleThemeCommand}"
+                                   IsEnabled="False"
                                    Margin="0,0,16,0" />
 
                         <ui:TextBlock Text="{Binding UserDisplayName}"
