@@ -32,6 +32,19 @@ public sealed record ConfirmPurchaseContract(Guid PurchaseId);
 
 public sealed record CancelPurchaseContract(Guid PurchaseId);
 
+/// <summary>Payload for editing an existing Draft's header/items - mirrors CreatePurchaseContract's shape since the underlying data replaced is the same shape.</summary>
+public sealed record UpdatePurchaseContract(
+    Guid PurchaseId,
+    Guid SupplierId,
+    string? SupplierInvoiceNumber,
+    DateTimeOffset PurchaseDate,
+    string? Notes,
+    IReadOnlyList<PurchaseItemContract> Items);
+
+public sealed record SetPurchasePaymentStatusContract(Guid PurchaseId, PurchasePaymentStatus PaymentStatus);
+
+public sealed record DeletePurchaseContract(Guid PurchaseId);
+
 public sealed record PurchaseSyncResultContract(
     Guid PurchaseId,
     string ServerPurchaseNumber,

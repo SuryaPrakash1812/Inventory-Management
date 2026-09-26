@@ -14,4 +14,4 @@ public interface ISyncEngine
     Task<SyncRunSummary> SyncPendingOperationsAsync(CancellationToken cancellationToken = default);
 }
 
-public sealed record SyncRunSummary(int Attempted, int Succeeded, int Failed);
+public sealed record SyncRunSummary(int Attempted, int Succeeded, int Failed, int Skipped = 0);

@@ -246,8 +246,9 @@ public partial class App : WpfApplication
                 {
                     var summary = await syncEngine.SyncPendingOperationsAsync();
                     Log.Information(
-                        "Sync run after reconnect: {Attempted} attempted, {Succeeded} succeeded, {Failed} failed",
-                        summary.Attempted, summary.Succeeded, summary.Failed);
+                        "Sync run after reconnect: {Attempted} attempted, {Succeeded} succeeded, "
+                            + "{Failed} failed, {Skipped} skipped (no server handler yet)",
+                        summary.Attempted, summary.Succeeded, summary.Failed, summary.Skipped);
                 }
                 catch (Exception ex)
                 {

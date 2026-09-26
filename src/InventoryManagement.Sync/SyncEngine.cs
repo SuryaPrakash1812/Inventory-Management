@@ -31,29 +31,32 @@ public sealed class SyncEngine : ISyncEngine
 
         var succeeded = 0;
         var failed = 0;
+        var skipped = 0;
 
         foreach (var operation in pending)
         {
+            // Only Purchase.Create has a server-side handler
+            // (PurchaseSyncService) right now. Per the offline-completeness
+            // stage's strategy, every Purchase-mutating operation queues an
+            // Outbox entry regardless - the Outbox's job is to durably
+            // record what happened locally for FUTURE synchronization, not
+            // to only record what can already be sent. An unsupported type
+            // is deliberately left untouched (still Pending, not marked
+            // Failed) - it isn't a failure, it's correctly waiting for a
+            // server handler that doesn't exist yet, and will be picked up
+            // automatically the moment a future stage adds one, with no
+            // migration or backfill needed for rows already sitting here.
+            if (operation.OperationType != "Purchase.Create")
+            {
+                skipped++;
+                continue;
+            }
+
             try
             {
                 var request = new SyncOperationRequest(
                     operation.Id, operation.OperationType, operation.EntityType, operation.EntityId,
                     operation.CreatedAtUtc, operation.PayloadJson);
-
-                // Only Purchase.Create is wired up in this foundation step
-                // (matches PurchaseSyncEndpoints on the API side). Anything
-                // else currently in the Outbox is marked failed rather than
-                // silently dropped or retried forever against an endpoint
-                // that does not exist yet.
-                if (operation.OperationType != "Purchase.Create")
-                {
-                    await _outboxProcessor.MarkFailedAsync(
-                        operation.Id,
-                        $"Operation type '{operation.OperationType}' is not yet supported by the Sync Engine.",
-                        cancellationToken);
-                    failed++;
-                    continue;
-                }
 
                 var response = await _apiClient.SendPurchaseCreateAsync(request, cancellationToken);
 
@@ -114,6 +117,6 @@ public sealed class SyncEngine : ISyncEngine
             }
         }
 
-        return new SyncRunSummary(pending.Count, succeeded, failed);
+        return new SyncRunSummary(pending.Count, succeeded, failed, skipped);
     }
 }

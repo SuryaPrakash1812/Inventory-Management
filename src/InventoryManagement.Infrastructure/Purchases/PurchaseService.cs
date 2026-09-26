@@ -201,21 +201,28 @@ public sealed class PurchaseService : IPurchaseService
         purchase.TaxAmount = taxTotal;
         purchase.TotalAmount = subtotal - discountTotal + taxTotal;
 
-        // Decision 8: a brand-new purchase queues an Outbox entry in the
-        // SAME SaveChangesAsync call as the business data below - never a
-        // separate commit, so it is impossible for this purchase to exist
-        // locally without a corresponding Outbox row, or vice versa. Only
-        // creation is queued in this foundation step: editing an existing
-        // draft, confirming, and cancelling do not yet have a server-side
-        // sync handler to receive them (see PurchaseSyncService in
-        // InventoryManagement.Infrastructure.Postgres, which currently
-        // implements Purchase.Create only) - queuing operations with
-        // nowhere to actually go yet would just accumulate Pending rows
-        // the Sync Engine can never successfully process.
-        if (auditAction == AuditAction.Created)
-        {
-            EnqueueCreatePurchaseOutboxOperation(purchase, request);
-        }
+        // Section 11 (offline-completeness stage): every operation that
+        // modifies a Purchase queues an Outbox entry now, not just
+        // creation - there must be no silent case where SQLite changes but
+        // has no representation for future synchronization. Only
+        // Purchase.Create has a server-side handler to actually process
+        // right now (PurchaseSyncService in Infrastructure.Postgres); the
+        // others accumulate as Pending until later stages add their
+        // handlers - see PurchaseSyncCoverage's coverage table, and
+        // SyncEngine's remarks on why an unsupported OperationType is left
+        // Pending rather than marked Failed.
+        EnqueueOutboxOperation(
+            auditAction == AuditAction.Created ? "Purchase.Create" : "Purchase.Update",
+            purchase.Id,
+            auditAction == AuditAction.Created
+                ? new CreatePurchaseContract(
+                    purchase.Id, purchase.SupplierId, purchase.SupplierInvoiceNumber, purchase.PurchaseDate,
+                    purchase.Notes,
+                    request.Items.Select(i => new PurchaseItemContract(i.ProductId, i.Quantity, i.UnitCost, i.DiscountAmount, i.TaxPercentage)).ToList())
+                : new UpdatePurchaseContract(
+                    purchase.Id, purchase.SupplierId, purchase.SupplierInvoiceNumber, purchase.PurchaseDate,
+                    purchase.Notes,
+                    request.Items.Select(i => new PurchaseItemContract(i.ProductId, i.Quantity, i.UnitCost, i.DiscountAmount, i.TaxPercentage)).ToList()));
 
         await _auditLogger.LogAsync(
             auditAction, nameof(Purchase), purchase.Id,
@@ -225,29 +232,21 @@ public sealed class PurchaseService : IPurchaseService
         return Result.Success(await ToDetailByIdAsync(purchase.Id, cancellationToken));
     }
 
-    private void EnqueueCreatePurchaseOutboxOperation(Purchase purchase, SaveDraftPurchaseRequest request)
+    /// <summary>
+    /// One shared queuing method for every Purchase-mutating operation,
+    /// replacing what was previously a Create-only helper. This entity's
+    /// own Id (assigned at construction, per BaseEntity) IS the OperationId
+    /// sent to the server and checked against its idempotency store - see
+    /// OutboxOperation's own remarks.
+    /// </summary>
+    private void EnqueueOutboxOperation(string operationType, Guid purchaseId, object payload)
     {
-        var contract = new CreatePurchaseContract(
-            purchase.Id,
-            purchase.SupplierId,
-            purchase.SupplierInvoiceNumber,
-            purchase.PurchaseDate,
-            purchase.Notes,
-            request.Items
-                .Select(i => new PurchaseItemContract(i.ProductId, i.Quantity, i.UnitCost, i.DiscountAmount, i.TaxPercentage))
-                .ToList());
-
-        var payloadJson = JsonSerializer.Serialize(contract);
-
-        // This entity's own Id (assigned at construction, per BaseEntity)
-        // IS the OperationId sent to the server and checked against its
-        // idempotency store - see OutboxOperation's own remarks.
         _context.OutboxOperations.Add(new OutboxOperation
         {
-            OperationType = "Purchase.Create",
+            OperationType = operationType,
             EntityType = nameof(Purchase),
-            EntityId = purchase.Id,
-            PayloadJson = payloadJson,
+            EntityId = purchaseId,
+            PayloadJson = JsonSerializer.Serialize(payload),
             CreatedAtUtc = _dateTimeProvider.UtcNow,
             Status = OutboxOperationStatus.Pending,
         });
@@ -270,6 +269,8 @@ public sealed class PurchaseService : IPurchaseService
         }
 
         purchase.MarkDeleted(_dateTimeProvider.UtcNow, null);
+
+        EnqueueOutboxOperation("Purchase.Delete", purchase.Id, new DeletePurchaseContract(purchase.Id));
 
         await _auditLogger.LogAsync(
             AuditAction.Deleted, nameof(Purchase), purchase.Id,
@@ -320,6 +321,8 @@ public sealed class PurchaseService : IPurchaseService
         }
 
         purchase.Status = PurchaseStatus.Confirmed;
+
+        EnqueueOutboxOperation("Purchase.Confirm", purchase.Id, new ConfirmPurchaseContract(purchase.Id));
 
         await _auditLogger.LogAsync(
             AuditAction.Updated, nameof(Purchase), purchase.Id,
@@ -388,6 +391,8 @@ public sealed class PurchaseService : IPurchaseService
 
         purchase.Status = PurchaseStatus.Cancelled;
 
+        EnqueueOutboxOperation("Purchase.Cancel", purchase.Id, new CancelPurchaseContract(purchase.Id));
+
         await _auditLogger.LogAsync(
             AuditAction.Updated, nameof(Purchase), purchase.Id,
             $"Purchase '{purchase.PurchaseNumber}' cancelled.", cancellationToken);
@@ -408,6 +413,9 @@ public sealed class PurchaseService : IPurchaseService
         }
 
         purchase.PaymentStatus = paymentStatus;
+
+        EnqueueOutboxOperation(
+            "Purchase.SetPaymentStatus", purchase.Id, new SetPurchasePaymentStatusContract(purchase.Id, paymentStatus));
 
         await _auditLogger.LogAsync(
             AuditAction.Updated, nameof(Purchase), purchase.Id,

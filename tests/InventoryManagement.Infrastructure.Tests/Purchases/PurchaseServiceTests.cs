@@ -437,19 +437,78 @@ public class PurchaseServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SaveDraftAsync_EditingAnExistingDraft_DoesNotQueueAnAdditionalOutboxOperation()
+    public async Task SaveDraftAsync_EditingAnExistingDraft_QueuesASeparatePurchaseUpdateOutboxOperation()
     {
-        // Only Purchase.Create is queued in this foundation step - editing
-        // a draft has no server-side sync handler yet to receive it (see
-        // PurchaseService.EnqueueCreatePurchaseOutboxOperation's remarks).
+        // Changed with the offline-completeness stage: every
+        // Purchase-mutating operation now queues an Outbox entry (Section
+        // 11), not just creation - editing a draft queues its own
+        // Purchase.Update entry alongside the original Purchase.Create one,
+        // even though only Create has a server handler to actually process
+        // right now (see SyncEngine's remarks on why an unsupported type is
+        // left Pending rather than treated as an error).
         var created = await _sut.SaveDraftAsync(MakeDraftRequest());
         await _sut.SaveDraftAsync(MakeDraftRequest(created.Value.Id, quantity: 20));
 
         var outboxOperations = await _context.OutboxOperations
             .Where(o => o.EntityId == created.Value.Id)
+            .OrderBy(o => o.CreatedAtUtc)
             .ToListAsync();
 
-        Assert.Single(outboxOperations);
+        Assert.Equal(2, outboxOperations.Count);
+        Assert.Equal("Purchase.Create", outboxOperations[0].OperationType);
+        Assert.Equal("Purchase.Update", outboxOperations[1].OperationType);
+    }
+
+    [Fact]
+    public async Task ConfirmPurchaseAsync_QueuesAPurchaseConfirmOutboxOperation()
+    {
+        var created = await _sut.SaveDraftAsync(MakeDraftRequest());
+
+        await _sut.ConfirmPurchaseAsync(created.Value.Id);
+
+        var confirmOperation = await _context.OutboxOperations
+            .SingleOrDefaultAsync(o => o.EntityId == created.Value.Id && o.OperationType == "Purchase.Confirm");
+
+        Assert.NotNull(confirmOperation);
+    }
+
+    [Fact]
+    public async Task CancelPurchaseAsync_QueuesAPurchaseCancelOutboxOperation()
+    {
+        var created = await _sut.SaveDraftAsync(MakeDraftRequest());
+
+        await _sut.CancelPurchaseAsync(created.Value.Id);
+
+        var cancelOperation = await _context.OutboxOperations
+            .SingleOrDefaultAsync(o => o.EntityId == created.Value.Id && o.OperationType == "Purchase.Cancel");
+
+        Assert.NotNull(cancelOperation);
+    }
+
+    [Fact]
+    public async Task SetPaymentStatusAsync_QueuesAPurchaseSetPaymentStatusOutboxOperation()
+    {
+        var created = await _sut.SaveDraftAsync(MakeDraftRequest());
+
+        await _sut.SetPaymentStatusAsync(created.Value.Id, PurchasePaymentStatus.Paid);
+
+        var paymentStatusOperation = await _context.OutboxOperations
+            .SingleOrDefaultAsync(o => o.EntityId == created.Value.Id && o.OperationType == "Purchase.SetPaymentStatus");
+
+        Assert.NotNull(paymentStatusOperation);
+    }
+
+    [Fact]
+    public async Task DeleteDraftAsync_QueuesAPurchaseDeleteOutboxOperation()
+    {
+        var created = await _sut.SaveDraftAsync(MakeDraftRequest());
+
+        await _sut.DeleteDraftAsync(created.Value.Id);
+
+        var deleteOperation = await _context.OutboxOperations
+            .SingleOrDefaultAsync(o => o.EntityId == created.Value.Id && o.OperationType == "Purchase.Delete");
+
+        Assert.NotNull(deleteOperation);
     }
 
     [Fact]
