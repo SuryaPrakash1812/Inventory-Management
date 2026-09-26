@@ -30,7 +30,8 @@
                           MinWidth="140"
                           VerticalAlignment="Center"
                           ItemsSource="{Binding AvailableThemes}"
-                          SelectedItem="{Binding SelectedTheme}" />
+                          SelectedItem="{Binding SelectedTheme}"
+                          IsEnabled="False" />
             </Grid>
         </ui:Card>
 
