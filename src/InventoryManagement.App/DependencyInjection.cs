@@ -2,6 +2,7 @@ using InventoryManagement.App.ViewModels;
 using InventoryManagement.App.ViewModels.Auth;
 using InventoryManagement.App.ViewModels.Categories;
 using InventoryManagement.App.ViewModels.Customers;
+using InventoryManagement.App.ViewModels.Dashboard;
 using InventoryManagement.App.ViewModels.Inventory;
 using InventoryManagement.App.ViewModels.Products;
 using InventoryManagement.App.ViewModels.Purchases;
@@ -48,6 +49,7 @@ public static class DependencyInjection
         // navigation by default (CacheHistory is 0), so there is no state to
         // preserve between visits for these simple pages.
         services.AddTransient<DashboardPage>();
+        services.AddTransient<DashboardViewModel>();
         services.AddTransient<ProductsPage>();
         services.AddTransient<ProductsViewModel>();
         services.AddTransient<CategoriesPage>();

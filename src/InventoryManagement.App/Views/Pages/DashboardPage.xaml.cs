@@ -1,17 +1,28 @@
 using System.Windows.Controls;
-using InventoryManagement.App.ViewModels;
+using System.Windows.Input;
+using InventoryManagement.App.ViewModels.Dashboard;
 
 namespace InventoryManagement.App.Views.Pages;
 
-/// <summary>
-/// Placeholder page for Dashboard. Key metrics and quick actions will appear here starting in Stage 8 (Dashboard and Reports).
-/// </summary>
 public partial class DashboardPage : Page
 {
-    public DashboardPage()
+    private readonly DashboardViewModel _viewModel;
+
+    public DashboardPage(DashboardViewModel viewModel)
     {
+        _viewModel = viewModel;
         InitializeComponent();
 
-        DataContext = new PlaceholderViewModel("Dashboard", "Key metrics and quick actions will appear here starting in Stage 8 (Dashboard and Reports).");
+        DataContext = viewModel;
+
+        Loaded += async (_, _) => await viewModel.InitializeAsync();
+
+        PreviewMouseWheel += OnPreviewMouseWheel;
+    }
+
+    private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        DashboardScrollViewer.ScrollToVerticalOffset(DashboardScrollViewer.VerticalOffset - e.Delta);
+        e.Handled = true;
     }
 }
