@@ -1,17 +1,28 @@
 using System.Windows.Controls;
-using InventoryManagement.App.ViewModels;
+using System.Windows.Input;
+using InventoryManagement.App.ViewModels.Reports;
 
 namespace InventoryManagement.App.Views.Pages;
 
-/// <summary>
-/// Placeholder page for Reports. Reporting arrives in Stage 8 (Dashboard and Reports).
-/// </summary>
 public partial class ReportsPage : Page
 {
-    public ReportsPage()
+    private readonly ReportsViewModel _viewModel;
+
+    public ReportsPage(ReportsViewModel viewModel)
     {
+        _viewModel = viewModel;
         InitializeComponent();
 
-        DataContext = new PlaceholderViewModel("Reports", "Reporting arrives in Stage 8 (Dashboard and Reports).");
+        DataContext = viewModel;
+
+        Loaded += async (_, _) => await viewModel.InitializeAsync();
+
+        PreviewMouseWheel += OnPreviewMouseWheel;
+    }
+
+    private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        ReportsScrollViewer.ScrollToVerticalOffset(ReportsScrollViewer.VerticalOffset - e.Delta);
+        e.Handled = true;
     }
 }

@@ -1,7 +1,93 @@
 <Page x:Class="InventoryManagement.App.Views.Pages.ReportsPage"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      xmlns:views="clr-namespace:InventoryManagement.App.Views"
+      xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
       Title="Reports">
-    <views:PlaceholderView />
+    <ScrollViewer x:Name="ReportsScrollViewer"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalContentAlignment="Stretch"
+                  Background="Transparent"
+                  PanningMode="VerticalOnly">
+        <Grid Margin="20" Background="Transparent">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
+                <ui:TextBlock Text="Report:" VerticalAlignment="Center" Margin="0,0,8,8" />
+                <ComboBox ItemsSource="{Binding ReportTypes}" SelectedItem="{Binding SelectedReportType}" MinWidth="160" Margin="0,0,16,8" />
+
+                <StackPanel Orientation="Horizontal" Visibility="{Binding ShowsDateRangeFilter, Converter={StaticResource BoolToVisibility}}">
+                    <ui:TextBlock Text="From:" VerticalAlignment="Center" Margin="0,0,8,8" />
+                    <DatePicker SelectedDate="{Binding FromDate}" Margin="0,0,16,8" />
+                    <ui:TextBlock Text="To:" VerticalAlignment="Center" Margin="0,0,8,8" />
+                    <DatePicker SelectedDate="{Binding ToDate}" Margin="0,0,16,8" />
+                    <ui:Button Content="Apply" Command="{Binding RunReportCommand}" Appearance="Primary" Margin="0,0,0,8" />
+                </StackPanel>
+            </WrapPanel>
+
+            <Grid Grid.Row="1">
+                <DataGrid ItemsSource="{Binding InventoryReport}"
+                          Visibility="{Binding IsShowingInventory, Converter={StaticResource BoolToVisibility}}"
+                          AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" MinHeight="300">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="100" />
+                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="220" />
+                        <DataGridTextColumn Header="Category" Binding="{Binding CategoryName}" Width="140" />
+                        <DataGridTextColumn Header="Current Stock" Binding="{Binding CurrentStock, StringFormat=N2}" Width="110" />
+                        <DataGridTextColumn Header="Cost Price" Binding="{Binding PurchasePrice, StringFormat=N2}" Width="100" />
+                        <DataGridTextColumn Header="Selling Price" Binding="{Binding SellingPrice, StringFormat=N2}" Width="100" />
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <DataGrid ItemsSource="{Binding LowStockReport}"
+                          Visibility="{Binding IsShowingLowStock, Converter={StaticResource BoolToVisibility}}"
+                          AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" MinHeight="300">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="SKU" Binding="{Binding Sku}" Width="100" />
+                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="220" />
+                        <DataGridTextColumn Header="Current Stock" Binding="{Binding CurrentStock, StringFormat=N2}" Width="120" />
+                        <DataGridTextColumn Header="Minimum Stock" Binding="{Binding MinimumStock, StringFormat=N2}" Width="120" />
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <DataGrid ItemsSource="{Binding PurchaseReport}"
+                          Visibility="{Binding IsShowingPurchases, Converter={StaticResource BoolToVisibility}}"
+                          AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" MinHeight="300">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Purchase #" Binding="{Binding PurchaseNumber}" Width="110" />
+                        <DataGridTextColumn Header="Supplier" Binding="{Binding SupplierName}" Width="180" />
+                        <DataGridTextColumn Header="Date" Binding="{Binding PurchaseDate, StringFormat=d}" Width="100" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" />
+                        <DataGridTextColumn Header="Total" Binding="{Binding TotalAmount, StringFormat=N2}" Width="100" />
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <DataGrid ItemsSource="{Binding SaleReport}"
+                          Visibility="{Binding IsShowingSales, Converter={StaticResource BoolToVisibility}}"
+                          AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" MinHeight="300">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Sale #" Binding="{Binding SaleNumber}" Width="110" />
+                        <DataGridTextColumn Header="Customer" Binding="{Binding CustomerName}" Width="180" />
+                        <DataGridTextColumn Header="Date" Binding="{Binding SaleDate, StringFormat=d}" Width="100" />
+                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" />
+                        <DataGridTextColumn Header="Total" Binding="{Binding TotalAmount, StringFormat=N2}" Width="100" />
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <DataGrid ItemsSource="{Binding StockMovementReport}"
+                          Visibility="{Binding IsShowingStockMovements, Converter={StaticResource BoolToVisibility}}"
+                          AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" MinHeight="300">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Date" Binding="{Binding OccurredAtUtc, StringFormat=g}" Width="150" />
+                        <DataGridTextColumn Header="Product" Binding="{Binding ProductName}" Width="180" />
+                        <DataGridTextColumn Header="Movement Type" Binding="{Binding MovementType}" Width="150" />
+                        <DataGridTextColumn Header="Quantity" Binding="{Binding QuantityChange, StringFormat=N2}" Width="100" />
+                        <DataGridTextColumn Header="Reference" Binding="{Binding ReferenceType}" Width="110" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Grid>
+    </ScrollViewer>
 </Page>
