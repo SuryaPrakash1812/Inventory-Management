@@ -24,6 +24,8 @@
   <ItemGroup>
     <ProjectReference Include="..\InventoryManagement.Application\InventoryManagement.Application.csproj" />
     <ProjectReference Include="..\InventoryManagement.Infrastructure\InventoryManagement.Infrastructure.csproj" />
+    <!-- Enables online-mode Purchase routing - see App.xaml.cs's AddSync call. -->
+    <ProjectReference Include="..\InventoryManagement.Sync\InventoryManagement.Sync.csproj" />
   </ItemGroup>
 
   <ItemGroup>

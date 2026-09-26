@@ -12,6 +12,8 @@ using InventoryManagement.Application.Common.Interfaces;
 using InventoryManagement.Application.Settings;
 using InventoryManagement.Infrastructure;
 using InventoryManagement.Infrastructure.Logging;
+using InventoryManagement.Sync;
+using InventoryManagement.Sync.Connectivity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -64,10 +66,33 @@ public partial class App : WpfApplication
                     config.SetBasePath(AppContext.BaseDirectory);
                     config.AddJsonFile("appsettings.json", optional: true, reloadOnChange: false);
                 })
-                .ConfigureServices((_, services) =>
+                .ConfigureServices((context, services) =>
                 {
                     services.AddApplication();
                     services.AddInfrastructure();
+
+                    // Registered AFTER AddInfrastructure deliberately -
+                    // Microsoft.Extensions.DependencyInjection resolves the
+                    // LAST registration for a given service type, and
+                    // AddSync overrides IPurchaseService to route through
+                    // the API when online (see AddSync's own remarks).
+                    // Reading Api:BaseAddress from configuration rather than
+                    // hardcoding it, since the API's actual port varies
+                    // (Visual Studio's auto-generated launchSettings.json
+                    // for the Api project, not something to assume a fixed
+                    // value for).
+                    var apiBaseAddress = context.Configuration["Api:BaseAddress"];
+                    if (!string.IsNullOrWhiteSpace(apiBaseAddress))
+                    {
+                        services.AddSync(new Uri(apiBaseAddress));
+                    }
+                    else
+                    {
+                        Log.Warning(
+                            "Api:BaseAddress is not configured - online mode is disabled for this run; " +
+                            "every Purchase operation will use local SQLite only, exactly as before Sync existed.");
+                    }
+
                     services.AddPresentation();
                 })
                 .Build();
@@ -81,6 +106,8 @@ public partial class App : WpfApplication
 
             var databaseInitializer = _appScope.ServiceProvider.GetRequiredService<IDatabaseInitializer>();
             await databaseInitializer.InitializeAsync();
+
+            TryWireAutomaticSyncOnReconnect();
 
             // Load persisted preferences and apply the theme before the first
             // window is shown, so there is no visible "flash" of the default
@@ -180,6 +207,60 @@ public partial class App : WpfApplication
     /// Serilog (never shown to the user) and shows a short, friendly message
     /// instead of letting the process crash silently or with a raw dialog.
     /// </summary>
+    /// <summary>
+    /// The RECONNECT half of online/offline support: without this,
+    /// pending Outbox operations would only ever be sent by manually
+    /// calling ISyncEngine.SyncPendingOperationsAsync() from somewhere -
+    /// nothing did, anywhere in the app, before this. Subscribes once, for
+    /// the whole app run, to IConnectivityService.ConnectivityChanged and
+    /// triggers a background sync attempt whenever it fires true (came
+    /// online) - fire-and-forget on purpose, so the UI thread is never
+    /// blocked waiting for synchronization (explicit requirement: "the UI
+    /// must remain responsive while synchronization happens").
+    ///
+    /// A no-op if Api:BaseAddress was not configured (see
+    /// ConfigureServices above) - IConnectivityService/ISyncEngine are
+    /// simply not registered in that case, so GetService returns null
+    /// rather than GetRequiredService throwing.
+    /// </summary>
+    private void TryWireAutomaticSyncOnReconnect()
+    {
+        var connectivity = _appScope!.ServiceProvider.GetService<IConnectivityService>();
+        var syncEngine = _appScope.ServiceProvider.GetService<ISyncEngine>();
+
+        if (connectivity is null || syncEngine is null)
+        {
+            return;
+        }
+
+        connectivity.ConnectivityChanged += (_, isOnline) =>
+        {
+            if (!isOnline)
+            {
+                return;
+            }
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var summary = await syncEngine.SyncPendingOperationsAsync();
+                    Log.Information(
+                        "Sync run after reconnect: {Attempted} attempted, {Succeeded} succeeded, {Failed} failed",
+                        summary.Attempted, summary.Succeeded, summary.Failed);
+                }
+                catch (Exception ex)
+                {
+                    // A failed sync attempt must never crash the app -
+                    // it just tries again on the next reconnect event (or
+                    // the ConnectivityService's own periodic backstop
+                    // check firing ConnectivityChanged again).
+                    Log.Warning(ex, "Sync run after reconnect failed");
+                }
+            });
+        };
+    }
+
     private void RegisterGlobalExceptionHandlers()
     {
         // Exceptions thrown on the UI thread during event handling.
