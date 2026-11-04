@@ -1,4 +1,6 @@
-; Compiled by build-installer.ps1, which passes AppVersion and publishes the app to .\publish first.
+; Compiled by build-installer.ps1, or by hand from the Inno Setup app. Either way the app must
+; already be published to .\publish, and the version comes from the published exe.
+#define AppVersion RemoveFileExt(GetVersionNumbersString(AddBackslash(SourcePath) + "publish\InventoryManagement.exe"))
 
 [Setup]
 ; Never change AppId: it is what lets a new version install over an old one.
@@ -17,6 +19,9 @@ ArchitecturesInstallIn64BitMode=x64compatible
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=..\src\InventoryManagement.App\Assets\app.ico
+WizardImageFile=wizard-large.bmp
+WizardSmallImageFile=wizard-small.bmp
 
 [Files]
 ; Customer data lives in %AppData%\InventoryManagement (see AppPaths), which

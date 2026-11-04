@@ -1,0 +1,39 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- The app logo, drawn on a 256 x 256 grid so it stays sharp at any size. Assets\app.ico is rendered from this. -->
+    <DrawingImage x:Key="AppIconImage">
+        <DrawingImage.Drawing>
+            <DrawingGroup>
+                <!-- Tile -->
+                <GeometryDrawing>
+                    <GeometryDrawing.Brush>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#2B9BEF" Offset="0" />
+                            <GradientStop Color="#0A5AD2" Offset="0.55" />
+                            <GradientStop Color="#0A3FAE" Offset="1" />
+                        </LinearGradientBrush>
+                    </GeometryDrawing.Brush>
+                    <GeometryDrawing.Geometry>
+                        <RectangleGeometry Rect="0,0,256,256" RadiusX="56" RadiusY="56" />
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+
+                <!-- Top cube -->
+                <GeometryDrawing Brush="#F2FBFF" Geometry="M128,44 L169,67.5 L128,91 L87,67.5 Z" />
+                <GeometryDrawing Brush="#9BD8FB" Geometry="M87,73 L125,95 L125,142 L87,120 Z" />
+                <GeometryDrawing Brush="#3C8DF0" Geometry="M169,73 L131,95 L131,142 L169,120 Z" />
+
+                <!-- Bottom left cube -->
+                <GeometryDrawing Brush="#F2FBFF" Geometry="M84,118 L125,141.5 L84,165 L43,141.5 Z" />
+                <GeometryDrawing Brush="#9BD8FB" Geometry="M43,147 L81,169 L81,216 L43,194 Z" />
+                <GeometryDrawing Brush="#3C8DF0" Geometry="M125,147 L87,169 L87,216 L125,194 Z" />
+
+                <!-- Bottom right cube -->
+                <GeometryDrawing Brush="#F2FBFF" Geometry="M172,118 L213,141.5 L172,165 L131,141.5 Z" />
+                <GeometryDrawing Brush="#9BD8FB" Geometry="M131,147 L169,169 L169,216 L131,194 Z" />
+                <GeometryDrawing Brush="#3C8DF0" Geometry="M213,147 L175,169 L175,216 L213,194 Z" />
+            </DrawingGroup>
+        </DrawingImage.Drawing>
+    </DrawingImage>
+</ResourceDictionary>

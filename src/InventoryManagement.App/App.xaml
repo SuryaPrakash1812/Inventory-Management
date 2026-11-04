@@ -9,6 +9,7 @@
                 <ui:ThemesDictionary Theme="Light" />
                 <ui:ControlsDictionary />
                 <ResourceDictionary Source="Styles/AppTheme.xaml" />
+                <ResourceDictionary Source="Styles/AppIcon.xaml" />
                 <!-- Converters before Components.xaml, whose templates use them -->
                 <ResourceDictionary>
                     <converters:BoolToVisibilityConverter x:Key="BoolToVisibility" />

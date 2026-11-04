@@ -4,6 +4,7 @@
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  xmlns:converters="clr-namespace:InventoryManagement.App.Converters"
                  Title="Inventory Management"
+                 Icon="pack://application:,,,/InventoryManagement;component/Assets/app.ico"
                  Height="600"
                  Width="460"
                  ResizeMode="NoResize"
@@ -27,6 +28,8 @@
                     VerticalAlignment="Center"
                     HorizontalAlignment="Center"
                     Width="340">
+
+            <Image Width="64" Height="64" Margin="0,0,0,14" HorizontalAlignment="Center" Source="{StaticResource AppIconImage}" />
 
             <ui:TextBlock Text="Inventory Management"
                           FontTypography="Title"

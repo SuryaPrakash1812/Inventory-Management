@@ -3,6 +3,7 @@
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  Title="{Binding WindowTitle}"
+                 Icon="pack://application:,,,/InventoryManagement;component/Assets/app.ico"
                  Height="900"
                  Width="1440"
                  MinHeight="600"
@@ -32,16 +33,7 @@
                 <DockPanel>
                     <!-- Brand -->
                     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="24,24,16,28">
-                        <Border Width="50" Height="50" CornerRadius="12">
-                            <Border.Background>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                    <GradientStop Color="#3B82F6" Offset="0" />
-                                    <GradientStop Color="#1D4ED8" Offset="1" />
-                                </LinearGradientBrush>
-                            </Border.Background>
-                            <ui:SymbolIcon Symbol="Box24" Filled="True" FontSize="28" Foreground="White"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
+                        <Image Width="50" Height="50" Source="{StaticResource AppIconImage}" />
                         <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
                             <TextBlock Text="Inventory Management" FontSize="17" FontWeight="Bold"
                                        Foreground="{StaticResource AppTextPrimaryBrush}" />

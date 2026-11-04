@@ -50,7 +50,7 @@ foreach ($required in 'InventoryManagement.exe', 'e_sqlcipher.dll') {
     }
 }
 
-& $iscc "/DAppVersion=$version" /Qp (Join-Path $PSScriptRoot 'InventoryManagement.iss')
+& $iscc /Qp (Join-Path $PSScriptRoot 'InventoryManagement.iss')
 if ($LASTEXITCODE -ne 0) {
     throw 'Compiling the installer failed - see the errors above.'
 }
