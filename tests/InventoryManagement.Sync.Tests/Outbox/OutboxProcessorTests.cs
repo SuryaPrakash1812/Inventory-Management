@@ -200,6 +200,9 @@ public sealed class OutboxProcessorTests : IDisposable
 
     public void Dispose()
     {
+        // Pooled connections keep the file open; release them before deleting it.
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+
         if (File.Exists(_databaseFilePath))
         {
             File.Delete(_databaseFilePath);
@@ -207,8 +210,8 @@ public sealed class OutboxProcessorTests : IDisposable
     }
 
     /// <summary>
-    /// Points at a temp file instead of AppPaths.DatabaseFilePath (which
-    /// the real SyncDbContextFactory hardcodes) - otherwise identical:
+    /// Points at an unencrypted temp file instead of the real (encrypted)
+    /// database the real SyncDbContextFactory opens - otherwise identical:
     /// a fresh InventoryDbContext per call, same interceptors.
     /// </summary>
     private sealed class FakeSyncDbContextFactory : ISyncDbContextFactory

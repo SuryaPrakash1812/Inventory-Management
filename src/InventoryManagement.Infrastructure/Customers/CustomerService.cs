@@ -159,11 +159,11 @@ public sealed class CustomerService : ICustomerService
 
         if (!string.IsNullOrWhiteSpace(query.SearchTerm))
         {
-            var term = query.SearchTerm.Trim();
+            var pattern = SearchPattern.Contains(query.SearchTerm.Trim());
             customers = customers.Where(c =>
-                c.Name.Contains(term)
-                || (c.Phone != null && c.Phone.Contains(term))
-                || (c.Email != null && c.Email.Contains(term)));
+                EF.Functions.Like(c.Name, pattern, SearchPattern.Escape)
+                || (c.Phone != null && EF.Functions.Like(c.Phone, pattern, SearchPattern.Escape))
+                || (c.Email != null && EF.Functions.Like(c.Email, pattern, SearchPattern.Escape)));
         }
 
         if (query.IsActive is { } isActive)

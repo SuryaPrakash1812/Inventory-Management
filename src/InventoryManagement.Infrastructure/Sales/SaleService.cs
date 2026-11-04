@@ -3,9 +3,11 @@ using InventoryManagement.Application.Common.Interfaces;
 using InventoryManagement.Application.Inventory;
 using InventoryManagement.Application.Sales;
 using InventoryManagement.Core.Common;
+using InventoryManagement.Domain.Common;
 using InventoryManagement.Domain.Entities;
 using InventoryManagement.Domain.Enums;
 using InventoryManagement.Domain.Sales;
+using InventoryManagement.Infrastructure.Common;
 using InventoryManagement.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -34,9 +36,10 @@ public sealed class SaleService : ISaleService
 
         if (!string.IsNullOrWhiteSpace(query.SearchTerm))
         {
-            var term = query.SearchTerm.Trim();
+            var pattern = SearchPattern.Contains(query.SearchTerm.Trim());
             filtered = filtered.Where(s =>
-                s.SaleNumber.Contains(term) || (s.InvoiceNumber != null && s.InvoiceNumber.Contains(term)));
+                EF.Functions.Like(s.SaleNumber, pattern, SearchPattern.Escape)
+                || (s.InvoiceNumber != null && EF.Functions.Like(s.InvoiceNumber, pattern, SearchPattern.Escape)));
         }
 
         if (query.CustomerId is { } customerId)
@@ -105,6 +108,10 @@ public sealed class SaleService : ISaleService
             return Result.Failure<SaleDetail>(validationError);
         }
 
+        // The old items are bulk-deleted below, straight against the database:
+        // without this, a failure in the final save would lose them.
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+
         Sale sale;
 
         if (request.SaleId is { } existingId)
@@ -168,6 +175,7 @@ public sealed class SaleService : ISaleService
             request.SaleId is null ? AuditAction.Created : AuditAction.Updated,
             nameof(Sale), sale.Id, $"Sale '{sale.SaleNumber}' draft saved with {request.Items.Count} item(s).", cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return Result.Success(await ToDetailByIdAsync(sale.Id, cancellationToken));
     }
@@ -214,18 +222,33 @@ public sealed class SaleService : ISaleService
         }
 
         // Unlike Purchase.Confirm (which only ever adds stock, nothing to
-        // check), invoicing removes stock - every line is verified BEFORE
-        // any of them are touched, so a failure partway through never
-        // leaves some lines issued and others not.
-        foreach (var item in sale.Items)
+        // check), invoicing removes stock - each product's TOTAL across its
+        // lines is verified BEFORE any of them are touched. Checking lines
+        // one at a time would pass two lines of 5 against a stock of 5.
+        var productIds = sale.Items.Select(i => i.ProductId).Distinct().ToList();
+        var products = await _context.Products
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(p => productIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.Name, p.QuantityOnHand })
+            .ToDictionaryAsync(p => p.Id, cancellationToken);
+
+        foreach (var group in sale.Items.GroupBy(i => i.ProductId))
         {
-            var currentStock = await _inventoryService.GetCurrentStockAsync(item.ProductId, cancellationToken);
-            var stockGuard = SaleWorkflow.EnsureSufficientStockToIssue(currentStock, item.Quantity);
+            var product = products[group.Key];
+            var stockGuard = SaleWorkflow.EnsureSufficientStockToIssue(product.QuantityOnHand, group.Sum(i => i.Quantity), product.Name);
             if (stockGuard.IsFailure)
             {
                 return Result.Failure<SaleDetail>(stockGuard.Error!);
             }
         }
+
+        // All-or-nothing: every stock movement and the status change commit
+        // together. InventoryService joins this transaction, so a failure on
+        // a later line also undoes the earlier ones - otherwise the sale would
+        // still be Draft with part of its stock already issued, and invoicing
+        // again would issue that part twice.
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
 
         foreach (var item in sale.Items)
         {
@@ -235,7 +258,9 @@ public sealed class SaleService : ISaleService
 
             if (removeResult.IsFailure)
             {
-                return Result.Failure<SaleDetail>($"Failed to issue stock for one of the items: {removeResult.Error}");
+                await transaction.RollbackAsync(cancellationToken);
+                _context.ChangeTracker.Clear();
+                return Result.Failure<SaleDetail>($"Failed to issue stock for {products[item.ProductId].Name}: {removeResult.Error}");
             }
         }
 
@@ -247,11 +272,12 @@ public sealed class SaleService : ISaleService
             $"Sale '{sale.SaleNumber}' invoiced as '{sale.InvoiceNumber}' - stock issued for {sale.Items.Count} item(s).",
             cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return Result.Success(await ToDetailByIdAsync(sale.Id, cancellationToken));
     }
 
-    public async Task<Result<SaleDetail>> CancelAsync(Guid saleId, CancellationToken cancellationToken = default)
+    public async Task<Result<SaleDetail>> CancelAsync(Guid saleId, string? reason = null, CancellationToken cancellationToken = default)
     {
         _context.ChangeTracker.Clear();
 
@@ -267,6 +293,9 @@ public sealed class SaleService : ISaleService
             return Result.Failure<SaleDetail>(cancelGuard.Error!);
         }
 
+        // All-or-nothing - see InvoiceAsync.
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+
         if (sale.Status == SaleStatus.Invoiced)
         {
             // Restoring stock can never fail on a sufficiency basis - adding
@@ -280,6 +309,8 @@ public sealed class SaleService : ISaleService
 
                 if (addResult.IsFailure)
                 {
+                    await transaction.RollbackAsync(cancellationToken);
+                    _context.ChangeTracker.Clear();
                     return Result.Failure<SaleDetail>($"Failed to restore stock for one of the items: {addResult.Error}");
                 }
             }
@@ -287,9 +318,18 @@ public sealed class SaleService : ISaleService
 
         sale.Status = SaleStatus.Cancelled;
 
+        var trimmedReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        if (trimmedReason is not null)
+        {
+            sale.Notes = CancellationNote.Append(sale.Notes, trimmedReason, _dateTimeProvider.UtcNow);
+        }
+
         await _auditLogger.LogAsync(
-            AuditAction.Updated, nameof(Sale), sale.Id, $"Sale '{sale.SaleNumber}' cancelled.", cancellationToken);
+            AuditAction.Updated, nameof(Sale), sale.Id,
+            trimmedReason is null ? $"Sale '{sale.SaleNumber}' cancelled." : $"Sale '{sale.SaleNumber}' cancelled: {trimmedReason}",
+            cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return Result.Success(await ToDetailByIdAsync(sale.Id, cancellationToken));
     }

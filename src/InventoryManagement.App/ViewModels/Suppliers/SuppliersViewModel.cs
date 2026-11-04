@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using InventoryManagement.App.Services;
 using InventoryManagement.Application.Common.Interfaces;
 using InventoryManagement.Application.Suppliers;
 
@@ -9,8 +10,18 @@ namespace InventoryManagement.App.ViewModels.Suppliers;
 public sealed partial class SuppliersViewModel : ViewModelBase
 {
     private readonly ISupplierService _supplierService;
+    private bool _isInitialized;
 
-    private const int PageSize = 25;
+    [ObservableProperty]
+    private int _pageSize = 10;
+
+    // --- Summary cards (all suppliers, regardless of filters) ---
+
+    [ObservableProperty] private int _allSupplierCount;
+    [ObservableProperty] private int _activeSupplierCount;
+    [ObservableProperty] private int _inactiveSupplierCount;
+    [ObservableProperty] private int _missingContactCount;
+    [ObservableProperty] private string _activePercent = "0%";
 
     public ObservableCollection<SupplierSummary> Suppliers { get; } = new();
 
@@ -93,12 +104,54 @@ public sealed partial class SuppliersViewModel : ViewModelBase
 
     public bool IsShowingList => !IsEditing && !IsViewingHistory;
 
-    public SuppliersViewModel(ISupplierService supplierService)
+    private readonly NavigationIntent _navigationIntent;
+
+    public SuppliersViewModel(ISupplierService supplierService, NavigationIntent navigationIntent)
     {
         _supplierService = supplierService;
+        _navigationIntent = navigationIntent;
     }
 
-    public async Task InitializeAsync() => await LoadAsync();
+    public async Task InitializeAsync()
+    {
+        // Arriving from the global search: show that supplier.
+        if (_navigationIntent.TryTake(typeof(Views.Pages.SuppliersPage), out var search, out _) && search is not null)
+        {
+            SearchTerm = search;
+        }
+
+        await LoadAsync();
+        await RefreshStatsAsync();
+        _isInitialized = true;
+    }
+
+    private async Task RefreshStatsAsync()
+    {
+        var all = (await _supplierService.GetSuppliersAsync(new SupplierQueryParameters { PageSize = int.MaxValue })).Items;
+        AllSupplierCount = all.Count;
+        ActiveSupplierCount = all.Count(s => s.IsActive);
+        InactiveSupplierCount = all.Count - ActiveSupplierCount;
+        MissingContactCount = all.Count(s => string.IsNullOrWhiteSpace(s.Phone) && string.IsNullOrWhiteSpace(s.Email));
+        ActivePercent = all.Count == 0 ? "0%" : $"{100.0 * ActiveSupplierCount / all.Count:0}%";
+    }
+
+    // Filters apply as soon as they change (the search box applies as you type).
+    partial void OnSelectedActiveFilterChanged(string value) => ReloadFromFirstPage();
+
+    partial void OnSortDescendingChanged(bool value) => ReloadFromFirstPage();
+
+    partial void OnPageSizeChanged(int value) => ReloadFromFirstPage();
+
+    private void ReloadFromFirstPage()
+    {
+        if (!_isInitialized)
+        {
+            return;
+        }
+
+        PageNumber = 1;
+        _ = LoadAsync();
+    }
 
     [RelayCommand]
     private async Task SearchAsync()
@@ -228,11 +281,15 @@ public sealed partial class SuppliersViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void CancelEdit()
+    private async Task CancelEditAsync()
     {
         IsEditing = false;
         ErrorMessage = null;
         OnPropertyChanged(nameof(IsShowingList));
+
+        // The list is always reloaded when returning to it.
+        await LoadAsync();
+        await RefreshStatsAsync();
     }
 
     [RelayCommand]
@@ -276,6 +333,7 @@ public sealed partial class SuppliersViewModel : ViewModelBase
             IsEditing = false;
             OnPropertyChanged(nameof(IsShowingList));
             await LoadAsync();
+            await RefreshStatsAsync();
         }
         finally
         {
@@ -296,6 +354,7 @@ public sealed partial class SuppliersViewModel : ViewModelBase
         }
 
         await LoadAsync();
+        await RefreshStatsAsync();
     }
 
     [RelayCommand]
@@ -317,9 +376,12 @@ public sealed partial class SuppliersViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void CloseHistory()
+    private async Task CloseHistoryAsync()
     {
         IsViewingHistory = false;
         OnPropertyChanged(nameof(IsShowingList));
+
+        await LoadAsync();
+        await RefreshStatsAsync();
     }
 }

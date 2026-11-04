@@ -1,28 +1,73 @@
 # Offline Testing — Manual Procedures
 
-Covers every module that actually exists in the application today (Auth, Products,
-Categories, Suppliers, Customers, Purchases, Inventory, Outbox). Sales and Stock
-Adjustments are **not included** — they have database schema only, no working
-functionality, so there is nothing to test.
+Covers every module in the application: Licensing, Auth, Products, Categories,
+Suppliers, Customers, Purchases, Sales, Inventory, Stock Adjustments, Reports,
+Backup, Settings and Outbox.
 
 For every test: **disconnect your machine from the internet, or simply don't start
 `InventoryManagement.Api`**, before you begin. The whole point is proving the app
 needs neither.
 
+**About the SQL checks below:** the local database is encrypted (see
+`docs/Licensing.md`), so DB Browser for SQLite **cannot** open `inventory.db`
+directly. That is the intended behavior and is itself tested in L3. To run the
+SQL queries in this document, take a backup (Backup page) and open the
+`.imbak` file with a SQLCipher-capable tool (for example, DB Browser for
+SQLite's "SQLCipher" build) using the customer's backup key. Alternatively,
+verify through the app's own screens.
+
+---
+
+## L1. Activation on a new PC
+
+**Steps:** Delete `%AppData%\InventoryManagement\license.lic` (if any) and launch the app.
+
+**Expected result:** The activation screen appears, showing a Machine ID. Nothing
+else is accessible. **Exit** closes the app.
+
+**Steps:** Issue a license for that Machine ID (`docs/Licensing.md`), then click
+**Load License File...** and select it.
+
+**Expected result:** The app continues to the login screen. Settings > License
+shows the customer name and Machine ID.
+
+## L2. License from another PC is refused
+
+**Steps:** Issue a license for a *different* Machine ID and try to load it.
+
+**Expected result:** "This license was issued for a different PC." Nothing is saved.
+Editing any character of a valid `.lic` file in a text editor and loading it
+gives a signature error instead.
+
+## L3. Copied data is unreadable
+
+**Steps:** Copy `inventory.db` (and `inventory.key`) to another PC, or try opening
+`inventory.db` in plain DB Browser for SQLite.
+
+**Expected result:** DB Browser reports the file is not a database / is encrypted.
+On another (licensed) PC, the app reports that the data cannot be opened there
+and offers to start with an empty database. It moves the unreadable files
+aside; it does not delete them.
+
+## L4. Upgrade from an unencrypted database
+
+**Setup:** An `inventory.db` created by a version before encryption existed.
+
+**Expected result:** After activation, the app starts normally with all existing
+data present, and the file is now encrypted (DB Browser can no longer open it).
+
 ---
 
 ## 1. Fresh application startup
 
-**Setup:** Rename or delete `%AppData%\InventoryManagement\inventory.db` (back it up
-first if it has data you care about).
+**Setup:** Rename or delete `%AppData%\InventoryManagement\inventory.db` and
+`inventory.key` (back them up first if they hold data you care about).
 
 **Steps:** Launch the WPF app.
 
-**Expected result:** No crash. A fresh `inventory.db` is created automatically, with
-the full schema and seeded default roles/permissions/admin user.
-
-**Verify:** Open `inventory.db` in DB Browser for SQLite -> confirm `Users`, `Roles`,
-`Permissions` tables have rows.
+**Expected result:** No crash. A fresh, encrypted `inventory.db` is created
+automatically, with the full schema and seeded default roles/permissions. The
+login screen asks you to create the administrator account.
 
 ---
 
@@ -145,10 +190,14 @@ confirmed again." Stock must NOT increase a second time.
 
 ## 9. Purchase cancellation
 
-**Steps:** Create and confirm a second purchase, then Cancel it.
+**Steps:** Create and confirm a second purchase, then Cancel it (from the open
+purchase, or from the row's "⋯" menu).
 
-**Expected result:** Status becomes Cancelled. Stock decreases back by the same
-quantity it was increased by on confirmation.
+**Expected result:** A dialog shows the stock change per product and asks for an
+optional reason. After confirming, status becomes Cancelled, stock decreases back
+by the quantity it was increased by, and the reason is added to the notes. If the
+purchase was marked Paid or Partially Paid, the dialog warns that any money must be
+recovered from the supplier separately.
 
 **Database verification:**
 ```sql
@@ -158,24 +207,26 @@ SELECT * FROM "StockMovements" WHERE "ReferenceId" = '<Id>' ORDER BY "CreatedAtU
 SELECT * FROM "OutboxOperations" WHERE "EntityId" = '<Id>' AND "OperationType" = 'Purchase.Cancel';
 ```
 
-**Negative case - insufficient stock to reverse:** Confirm a purchase, then use
-some of that stock some other way that reduces it below the original purchased
-quantity (currently, this would require another confirmed purchase's cancellation
-consuming it, or a future Sales/Adjustment feature - if no such path exists yet,
-this case cannot be exercised and should be noted as such rather than skipped
-silently).
-**Expected result if reachable:** Cancellation is rejected with a message
-naming how much stock remains vs. how much would need to be reversed. No stock
-movement is created; status stays Confirmed.
+**Negative case - insufficient stock to reverse:** Confirm a purchase of 10
+units of a product with no other stock, then invoice a Sale of 6 of those units,
+then try to cancel the purchase.
+**Expected result:** The dialog shows how much stock remains vs. how much would need
+to be reversed, and offers only Close. No stock movement is created; status stays
+Confirmed.
+
+**Unsaved edits:** Change a quantity on a draft and click Confirm Purchase: the
+*edited* quantity goes into stock. Change something and click Close: you are asked
+whether to discard the changes.
 
 ---
 
 ## 10. Payment status
 
-**Steps:** Open a Confirmed purchase -> change Payment Status -> Save (explicit
-button click - this does not autosave).
+**Steps:** Open a Confirmed purchase -> change Payment Status -> Update Payment
+Status (explicit button click - this does not autosave).
 
-**Expected result:** Status updates.
+**Expected result:** Status updates. The Payment section does not appear on Draft or
+Cancelled purchases - payment is only tracked once a purchase is Confirmed.
 
 **Database verification:**
 ```sql
@@ -292,3 +343,69 @@ by a partial term, apply a status filter, sort a column, page forward and back.
 
 **Expected result:** All operate correctly and instantly, entirely against local
 SQLite.
+
+---
+
+## 18. Sales
+
+**Steps:** New Sale -> pick a customer -> add a product with enough stock -> Save
+Draft -> Invoice.
+
+**Expected result:** Status becomes Invoiced, an `INV-...` invoice number is
+assigned, and the product's stock drops by the sold quantity.
+
+**Negative cases:** Invoicing a quantity larger than current stock is rejected
+with "Insufficient stock..." and no stock changes. Clicking Invoice again on an
+invoiced sale is rejected. Cancelling an invoiced sale returns the stock
+(a SalesReturn movement).
+
+## 19. Stock adjustments
+
+**Steps:** New adjustment -> add +5 for one product and -2 for another -> Confirm.
+
+**Expected result:** Both stock levels change accordingly. A zero quantity line
+is rejected. Cancelling reverses both, unless some of the added stock has
+already been used, in which case cancellation is rejected.
+
+## 20. Reports
+
+**Steps:** Open each report type. For Purchases / Sales / Stock Movements, set a
+From/To date and click Apply. Click **Export to CSV...**.
+
+**Expected result:** Only rows inside the date range appear, with no row limit,
+and the summary line shows the count and total. The CSV opens in Excel with the
+company name (from Settings) at the top and the same rows.
+
+## 21. Backup and restore
+
+**Steps:** Backup page -> **Create Backup Now**.
+
+**Expected result:** A `.imbak` file appears in the backup folder and in Backup
+History (Status: Success). The file cannot be opened in plain DB Browser for SQLite.
+
+**Steps:** Change some data, then **Restore From File...** -> pick that backup ->
+close and reopen the app.
+
+**Expected result:** The data is back to the state at backup time. The data
+from before the restore is kept as `inventory.before-restore.db`.
+
+**Negative cases:** Restoring a backup taken under a *different customer's*
+license is rejected ("created under a different license"). Restoring an arbitrary
+`.db` file is rejected ("not an Inventory Management backup").
+
+## 22. Automatic backups and retention
+
+**Steps:** Settings -> Backup: set "Every 1 hours", keep 2 -> Save. Leave the app
+running (or restart it at least one hour apart).
+
+**Expected result:** About a minute after startup, and then hourly, an automatic
+backup appears in Backup History with Automatic checked. Only the newest 2
+automatic backups are kept. Manual backups are never removed.
+
+## 23. Settings
+
+**Steps:** Change Theme (Light / Dark / System), fill in the company details,
+choose a backup folder -> Save -> restart the app.
+
+**Expected result:** All values persist. The theme applies immediately, and the
+next backup goes to the chosen folder.

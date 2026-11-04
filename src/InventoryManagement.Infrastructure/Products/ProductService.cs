@@ -6,6 +6,7 @@ using InventoryManagement.Application.Products;
 using InventoryManagement.Core.Common;
 using InventoryManagement.Domain.Entities;
 using InventoryManagement.Domain.Enums;
+using InventoryManagement.Infrastructure.Common;
 using InventoryManagement.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -490,11 +491,11 @@ public sealed class ProductService : IProductService
 
         if (!string.IsNullOrWhiteSpace(query.SearchTerm))
         {
-            var term = query.SearchTerm.Trim();
+            var pattern = SearchPattern.Contains(query.SearchTerm.Trim());
             products = products.Where(p =>
-                p.Sku.Contains(term)
-                || (p.Barcode != null && p.Barcode.Contains(term))
-                || p.Name.Contains(term));
+                EF.Functions.Like(p.Sku, pattern, SearchPattern.Escape)
+                || (p.Barcode != null && EF.Functions.Like(p.Barcode, pattern, SearchPattern.Escape))
+                || EF.Functions.Like(p.Name, pattern, SearchPattern.Escape));
         }
 
         if (query.CategoryId is { } categoryId)

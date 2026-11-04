@@ -38,6 +38,11 @@ public static class PurchaseWorkflow
             return Result.Failure("Item discount cannot be negative.");
         }
 
+        if (discountAmount > quantity * unitCost)
+        {
+            return Result.Failure("Item discount cannot be more than the item's amount (quantity x unit cost).");
+        }
+
         if (taxPercentage is < 0 or > 100)
         {
             return Result.Failure("Item tax percentage must be between 0 and 100.");
@@ -110,14 +115,30 @@ public static class PurchaseWorkflow
             ? Result.Success()
             : Result.Failure("Purchase is already cancelled.");
 
-    /// <summary>Safe business rule: never partially reverse stock or force it negative on cancellation - every line must have enough remaining stock to fully reverse.</summary>
-    public static Result EnsureSufficientStockToReverse(decimal currentStock, decimal quantityToReverse) =>
+    /// <summary>
+    /// Payment is only tracked for a Confirmed purchase: a Draft has not been
+    /// received yet, and a Cancelled purchase is closed. Its last payment
+    /// status stays on record, so a cancelled purchase that was paid still
+    /// shows that money needs recovering from the supplier.
+    /// </summary>
+    public static Result EnsurePaymentStatusChangeable(PurchaseStatus status) =>
+        status == PurchaseStatus.Confirmed
+            ? Result.Success()
+            : Result.Failure($"Payment status can only be changed on a Confirmed purchase - this purchase is {status}.");
+
+    /// <summary>
+    /// Safe business rule: never partially reverse stock or force it negative
+    /// on cancellation. <paramref name="quantityToReverse"/> must be the
+    /// purchase's TOTAL for the product across all of its lines - checking
+    /// lines one at a time would pass two lines of 5 against a stock of 5.
+    /// </summary>
+    public static Result EnsureSufficientStockToReverse(decimal currentStock, decimal quantityToReverse, string? productName = null) =>
         currentStock >= quantityToReverse
             ? Result.Success()
             : Result.Failure(
                 "Cannot cancel: some of this purchase's stock has already been used elsewhere "
-                    + $"(only {currentStock} of {quantityToReverse} remaining for one of the items). "
-                    + "Reduce usage of the affected product(s) before cancelling.");
+                    + $"(only {currentStock:0.####} of {quantityToReverse:0.####} remaining for {productName ?? "one of the items"}). "
+                    + "Cancel the sales that used it, or add the stock back with a stock adjustment, then try again.");
 
     /// <summary>
     /// Decision 3 (offline-safe purchase numbering): combines a short,

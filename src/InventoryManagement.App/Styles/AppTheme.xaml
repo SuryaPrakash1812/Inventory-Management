@@ -1,0 +1,256 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+
+    <!--
+        The application's own light palette and the building blocks of the
+        shell/dashboard design (cards, sidebar items, pills, link buttons).
+        Light-only by design: the app always runs WPF-UI's Light theme.
+    -->
+
+    <Color x:Key="AppPrimaryColor">#2563EB</Color>
+
+    <SolidColorBrush x:Key="AppBackgroundBrush" Color="#F5F7FB" />
+    <SolidColorBrush x:Key="AppSurfaceBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="AppBorderBrush" Color="#E6EAF0" />
+    <SolidColorBrush x:Key="AppDividerBrush" Color="#EEF1F5" />
+    <SolidColorBrush x:Key="AppTextPrimaryBrush" Color="#0F172A" />
+    <SolidColorBrush x:Key="AppTextSecondaryBrush" Color="#64748B" />
+    <SolidColorBrush x:Key="AppTextMutedBrush" Color="#94A3B8" />
+    <SolidColorBrush x:Key="AppPrimaryBrush" Color="{StaticResource AppPrimaryColor}" />
+    <SolidColorBrush x:Key="AppPrimarySoftBrush" Color="#EAF1FE" />
+    <SolidColorBrush x:Key="AppHoverBrush" Color="#F1F5F9" />
+    <SolidColorBrush x:Key="AppTableHeaderBrush" Color="#F8FAFC" />
+    <SolidColorBrush x:Key="AppSuccessBrush" Color="#22C55E" />
+    <SolidColorBrush x:Key="AppDangerBrush" Color="#EF4444" />
+
+    <!-- KPI card accents: icon tile colour + a very light tint for the card itself -->
+    <SolidColorBrush x:Key="KpiBlueBrush" Color="#2563EB" />
+    <SolidColorBrush x:Key="KpiBlueTintBrush" Color="#F7FAFF" />
+    <SolidColorBrush x:Key="KpiBlueSoftBrush" Color="#E3ECFD" />
+    <SolidColorBrush x:Key="KpiGreenBrush" Color="#16A34A" />
+    <SolidColorBrush x:Key="KpiGreenTintBrush" Color="#F5FCF7" />
+    <SolidColorBrush x:Key="KpiGreenSoftBrush" Color="#DCF5E4" />
+    <SolidColorBrush x:Key="KpiOrangeBrush" Color="#F97316" />
+    <SolidColorBrush x:Key="KpiOrangeTintBrush" Color="#FFF9F5" />
+    <SolidColorBrush x:Key="KpiOrangeSoftBrush" Color="#FFE8D9" />
+    <SolidColorBrush x:Key="KpiPurpleBrush" Color="#9333EA" />
+    <SolidColorBrush x:Key="KpiPurpleTintBrush" Color="#FBF8FF" />
+    <SolidColorBrush x:Key="KpiPurpleSoftBrush" Color="#EFE5FD" />
+
+    <DropShadowEffect x:Key="CardShadow" BlurRadius="16" ShadowDepth="2" Direction="270" Opacity="0.06" Color="#0F172A" />
+
+    <!-- White rounded card used for every dashboard panel -->
+    <Style x:Key="Card" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource AppSurfaceBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource AppBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="Padding" Value="20" />
+        <Setter Property="Effect" Value="{StaticResource CardShadow}" />
+    </Style>
+
+    <Style x:Key="CardTitle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="17" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource AppTextPrimaryBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="SecondaryText" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{StaticResource AppTextSecondaryBrush}" />
+    </Style>
+
+    <Style x:Key="TableHeaderText" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{StaticResource AppTextSecondaryBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="TableCellText" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Foreground" Value="{StaticResource AppTextPrimaryBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!-- "View All"-style text button -->
+    <Style x:Key="LinkButton" TargetType="Button">
+        <Setter Property="Foreground" Value="{StaticResource AppPrimaryBrush}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border Background="Transparent" Padding="4,2">
+                        <ContentPresenter x:Name="Content" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Content" Property="Opacity" Value="0.75" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Small square chevron button in the corner of a KPI card -->
+    <Style x:Key="CardChevronButton" TargetType="Button">
+        <Setter Property="Width" Value="32" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Chrome" Background="{TemplateBinding Background}" CornerRadius="8">
+                        <ui:SymbolIcon Symbol="ChevronRight20" FontSize="16" Foreground="{TemplateBinding Foreground}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chrome" Property="Opacity" Value="0.75" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Plain icon button for the top bar (bell) -->
+    <Style x:Key="TopBarIconButton" TargetType="Button">
+        <Setter Property="Width" Value="40" />
+        <Setter Property="Height" Value="40" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Foreground" Value="{StaticResource AppTextSecondaryBrush}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Chrome" Background="Transparent" CornerRadius="20">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AppHoverBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Flat button whose content fills it (user menu, date range picker) -->
+    <Style x:Key="FlatButton" TargetType="Button">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Foreground" Value="{StaticResource AppTextPrimaryBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="8,4" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AppHoverBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Sidebar navigation item: rounded row, blue tint + left accent bar when selected -->
+    <Style x:Key="SidebarItem" TargetType="ListBoxItem">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Margin" Value="12,2" />
+        <Setter Property="Foreground" Value="#334155" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Grid>
+                        <Border x:Name="Chrome" Background="Transparent" CornerRadius="10" Padding="16,11">
+                            <ContentPresenter />
+                        </Border>
+                        <Border x:Name="Accent" Width="3" HorizontalAlignment="Left" Margin="0,8" CornerRadius="2"
+                                Background="{StaticResource AppPrimaryBrush}" Visibility="Collapsed" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AppHoverBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AppPrimarySoftBrush}" />
+                            <Setter TargetName="Accent" Property="Visibility" Value="Visible" />
+                            <Setter Property="Foreground" Value="{StaticResource AppPrimaryBrush}" />
+                            <Setter Property="FontWeight" Value="SemiBold" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Rows of the global search results popup -->
+    <Style x:Key="SearchResultItem" TargetType="ListBoxItem">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Border x:Name="Chrome" Background="Transparent" CornerRadius="8" Padding="10,8" Margin="4,1">
+                        <ContentPresenter />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AppHoverBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AppPrimarySoftBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Chrome-less text box, for inputs that sit inside their own styled border (global search) -->
+    <Style x:Key="BareTextBox" TargetType="TextBox">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="{StaticResource AppTextPrimaryBrush}" />
+        <Setter Property="CaretBrush" Value="{StaticResource AppTextPrimaryBrush}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <ScrollViewer x:Name="PART_ContentHost" Focusable="False" VerticalAlignment="Center"
+                                  HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Rounded status chip, coloured by StatusPillBrushConverter -->
+    <Style x:Key="StatusPill" TargetType="Border">
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="9,2" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- Borderless ComboBox-look dropdown header used in card corners -->
+    <Style x:Key="CardDropdown" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+        <Setter Property="MinWidth" Value="130" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+</ResourceDictionary>

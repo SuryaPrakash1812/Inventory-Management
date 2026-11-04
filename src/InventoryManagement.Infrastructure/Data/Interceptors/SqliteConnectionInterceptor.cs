@@ -1,4 +1,5 @@
 using System.Data.Common;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace InventoryManagement.Infrastructure.Data.Interceptors;
@@ -17,11 +18,22 @@ namespace InventoryManagement.Infrastructure.Data.Interceptors;
 /// immediately with SQLITE_BUSY; with it, SQLite retries internally for up
 /// to this many milliseconds before giving up, so a second concurrent
 /// stock update simply waits its turn instead of erroring out.
+///
+/// journal_mode is skipped on READ-ONLY connections: EF Core opens one
+/// (Mode=ReadOnly) to check whether the database exists before migrating.
+/// Switching a file that is not yet in WAL mode is a write, which a
+/// read-only connection refuses ("attempt to write a readonly database") -
+/// that is exactly what happened on the first start after a database was
+/// encrypted, because SQLCipher's export writes a rollback-journal file. The
+/// next read-write connection switches it to WAL as usual.
 /// </summary>
 public sealed class SqliteConnectionInterceptor : DbConnectionInterceptor
 {
     private const string PragmaSql =
         "PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;";
+
+    private const string ReadOnlyPragmaSql =
+        "PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;";
 
     public override void ConnectionOpened(DbConnection connection, ConnectionEndEventData eventData)
     {
@@ -38,10 +50,15 @@ public sealed class SqliteConnectionInterceptor : DbConnectionInterceptor
         await base.ConnectionOpenedAsync(connection, eventData, cancellationToken);
     }
 
+    private static string PragmasFor(DbConnection connection) =>
+        new SqliteConnectionStringBuilder(connection.ConnectionString).Mode == SqliteOpenMode.ReadOnly
+            ? ReadOnlyPragmaSql
+            : PragmaSql;
+
     private static void ApplyPragmas(DbConnection connection)
     {
         using var command = connection.CreateCommand();
-        command.CommandText = PragmaSql;
+        command.CommandText = PragmasFor(connection);
         command.ExecuteNonQuery();
     }
 
@@ -50,7 +67,7 @@ public sealed class SqliteConnectionInterceptor : DbConnectionInterceptor
         var command = connection.CreateCommand();
         await using (command.ConfigureAwait(false))
         {
-            command.CommandText = PragmaSql;
+            command.CommandText = PragmasFor(connection);
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
     }

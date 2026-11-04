@@ -4,6 +4,7 @@ using InventoryManagement.Application.Categories;
 using InventoryManagement.Application.Common.Interfaces;
 using InventoryManagement.Application.Customers;
 using InventoryManagement.Application.Inventory;
+using InventoryManagement.Application.Licensing;
 using InventoryManagement.Application.Products;
 using InventoryManagement.Application.Purchases;
 using InventoryManagement.Application.Sales;
@@ -19,6 +20,7 @@ using InventoryManagement.Infrastructure.Customers;
 using InventoryManagement.Infrastructure.Data;
 using InventoryManagement.Infrastructure.Data.Interceptors;
 using InventoryManagement.Infrastructure.Inventory;
+using InventoryManagement.Infrastructure.Licensing;
 using InventoryManagement.Infrastructure.Products;
 using InventoryManagement.Infrastructure.Purchases;
 using InventoryManagement.Infrastructure.Sales;
@@ -38,8 +40,15 @@ namespace InventoryManagement.Infrastructure;
 /// </summary>
 public static class DependencyInjection
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services)
+    /// <param name="database">The (already unlocked) local database - see LocalDatabaseBootstrapper.</param>
+    /// <param name="license">The license validated at startup; also supplies the backup encryption key.</param>
+    public static IServiceCollection AddInfrastructure(
+        this IServiceCollection services, LocalDatabaseOptions database, ActiveLicense license)
     {
+        services.AddSingleton(database);
+        services.AddSingleton<ILicenseInfo>(license);
+        services.AddSingleton<IBackupKeyProvider>(license);
+
         services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
         services.AddSingleton<ISettingsService, JsonSettingsService>();
 
@@ -48,7 +57,7 @@ public static class DependencyInjection
 
         services.AddDbContext<InventoryDbContext>((sp, options) =>
         {
-            options.UseSqlite($"Data Source={AppPaths.DatabaseFilePath}");
+            options.UseSqlite(database.ConnectionString);
             options.AddInterceptors(
                 sp.GetRequiredService<AuditableEntitySaveChangesInterceptor>(),
                 sp.GetRequiredService<SqliteConnectionInterceptor>());
@@ -92,6 +101,7 @@ public static class DependencyInjection
         services.AddScoped<IStockAdjustmentService, StockAdjustmentService>();
         services.AddScoped<ISaleService, SaleService>();
         services.AddScoped<IBackupService, BackupService>();
+        services.AddSingleton<AutomaticBackupScheduler>();
 
         return services;
     }

@@ -14,6 +14,13 @@ public sealed partial class CategoriesViewModel : ViewModelBase
     /// <summary>Choices for the "parent category" dropdown - every category except whichever one is currently being edited (a category can't be its own parent).</summary>
     public ObservableCollection<CategorySummary> ParentCategoryOptions { get; } = new();
 
+    // --- Summary cards (all categories, regardless of the search) ---
+
+    [ObservableProperty] private int _totalCategoryCount;
+    [ObservableProperty] private int _usedCategoryCount;
+    [ObservableProperty] private int _emptyCategoryCount;
+    [ObservableProperty] private int _subcategoryCount;
+
     [ObservableProperty]
     private string _searchTerm = string.Empty;
 
@@ -58,6 +65,12 @@ public sealed partial class CategoriesViewModel : ViewModelBase
             {
                 Categories.Add(category);
             }
+
+            var all = string.IsNullOrWhiteSpace(SearchTerm) ? categories : await _categoryService.GetCategoriesAsync();
+            TotalCategoryCount = all.Count;
+            UsedCategoryCount = all.Count(c => c.ProductCount > 0);
+            EmptyCategoryCount = all.Count(c => c.ProductCount == 0);
+            SubcategoryCount = all.Count(c => c.ParentCategoryId is not null);
         }
         finally
         {
@@ -105,10 +118,13 @@ public sealed partial class CategoriesViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void CancelEdit()
+    private async Task CancelEditAsync()
     {
         IsEditing = false;
         ErrorMessage = null;
+
+        // The list is always reloaded when returning to it.
+        await LoadAsync();
     }
 
     [RelayCommand]

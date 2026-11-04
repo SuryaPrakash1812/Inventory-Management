@@ -1,4 +1,4 @@
-using InventoryManagement.Application.Settings;
+﻿using InventoryManagement.Application.Settings;
 using InventoryManagement.Infrastructure.Settings;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -32,7 +32,7 @@ public class JsonSettingsServiceTests : IDisposable
 
         await sut.LoadAsync();
 
-        Assert.Equal(ThemeMode.System, sut.Current.Theme);
+        Assert.Equal(ThemeMode.Light, sut.Current.Theme);
     }
 
     [Fact]
@@ -58,6 +58,6 @@ public class JsonSettingsServiceTests : IDisposable
         var sut = CreateSut();
         await sut.LoadAsync();
 
-        Assert.Equal(ThemeMode.System, sut.Current.Theme);
+        Assert.Equal(ThemeMode.Light, sut.Current.Theme);
     }
 }

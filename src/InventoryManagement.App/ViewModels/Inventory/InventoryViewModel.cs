@@ -17,15 +17,25 @@ namespace InventoryManagement.App.ViewModels.Inventory;
 /// </summary>
 public sealed partial class InventoryViewModel : ViewModelBase
 {
+    /// <summary>The "All" entry at the top of the category filter (Id = Guid.Empty means no filter).</summary>
+    private static readonly CategorySummary AllCategories = new(Guid.Empty, "All", null, null, null, 0);
+
     private readonly IInventoryService _inventoryService;
     private readonly IProductService _productService;
     private readonly ICategoryService _categoryService;
 
-    private const int PageSize = 25;
     private int _loadRequestVersion;
+    private bool _isInitialized;
+
+    [ObservableProperty]
+    private int _pageSize = 10;
+
+    [ObservableProperty]
+    private int _outOfStockCount;
 
     public ObservableCollection<InventoryOverviewRow> Products { get; } = new();
 
+    /// <summary>Category filter choices, "All" first.</summary>
     public ObservableCollection<CategorySummary> Categories { get; } = new();
 
     public ObservableCollection<LowStockProduct> LowStockProducts { get; } = new();
@@ -95,6 +105,7 @@ public sealed partial class InventoryViewModel : ViewModelBase
         await RefreshCategoriesAsync();
         await RefreshSummaryAsync();
         await LoadAsync();
+        _isInitialized = true;
     }
 
     private async Task RefreshCategoriesAsync()
@@ -102,10 +113,31 @@ public sealed partial class InventoryViewModel : ViewModelBase
         var categories = await _categoryService.GetCategoriesAsync();
 
         Categories.Clear();
+        Categories.Add(AllCategories);
         foreach (var category in categories)
         {
             Categories.Add(category);
         }
+
+        SelectedCategoryFilter = AllCategories;
+    }
+
+    // Filters apply as soon as they change (the search box applies as you type).
+    partial void OnSelectedCategoryFilterChanged(CategorySummary? value) => ReloadFromFirstPage();
+
+    partial void OnSelectedStatusFilterChanged(string value) => ReloadFromFirstPage();
+
+    partial void OnPageSizeChanged(int value) => ReloadFromFirstPage();
+
+    private void ReloadFromFirstPage()
+    {
+        if (!_isInitialized)
+        {
+            return;
+        }
+
+        PageNumber = 1;
+        _ = LoadAsync();
     }
 
     private async Task RefreshSummaryAsync()
@@ -122,7 +154,8 @@ public sealed partial class InventoryViewModel : ViewModelBase
             LowStockProducts.Add(product);
         }
 
-        LowStockCount = lowStock.Count;
+        OutOfStockCount = lowStock.Count(p => p.CurrentStock <= 0);
+        LowStockCount = lowStock.Count - OutOfStockCount;
     }
 
     [RelayCommand]
@@ -136,7 +169,7 @@ public sealed partial class InventoryViewModel : ViewModelBase
     private async Task ClearFiltersAsync()
     {
         SearchTerm = string.Empty;
-        SelectedCategoryFilter = null;
+        SelectedCategoryFilter = AllCategories;
         SelectedStatusFilter = "All";
         PageNumber = 1;
         await LoadAsync();
@@ -169,16 +202,18 @@ public sealed partial class InventoryViewModel : ViewModelBase
         IsBusy = true;
         try
         {
-            // The status filter is applied client-side after fetching, since
-            // it is a computed display label (InventoryOverviewRow), not a
-            // stored column IProductService's query can filter by server-side.
+            // The status is a computed label (InventoryOverviewRow), not a
+            // stored column IProductService can filter by, so every matching
+            // product is fetched, filtered by status, and only THEN paged.
+            // (Filtering after paging - as this used to - showed only the
+            // matching rows of one page, with a total that ignored the filter.)
             var result = await _productService.GetProductsAsync(new ProductQueryParameters
             {
                 SearchTerm = string.IsNullOrWhiteSpace(SearchTerm) ? null : SearchTerm,
-                CategoryId = SelectedCategoryFilter?.Id,
+                CategoryId = SelectedCategoryFilter is { } category && category.Id != Guid.Empty ? category.Id : null,
                 IsActive = true,
-                PageNumber = PageNumber,
-                PageSize = PageSize,
+                PageNumber = 1,
+                PageSize = int.MaxValue,
             });
 
             if (requestVersion != _loadRequestVersion)
@@ -187,23 +222,21 @@ public sealed partial class InventoryViewModel : ViewModelBase
             }
 
             var rows = result.Items.Select(p => new InventoryOverviewRow(p));
-
-            rows = SelectedStatusFilter switch
+            if (SelectedStatusFilter != "All")
             {
-                "In Stock" => rows.Where(r => r.StockStatus == "In Stock"),
-                "Low Stock" => rows.Where(r => r.StockStatus == "Low Stock"),
-                "Out of Stock" => rows.Where(r => r.StockStatus == "Out of Stock"),
-                _ => rows,
-            };
+                rows = rows.Where(r => r.StockStatus == SelectedStatusFilter);
+            }
+
+            var filtered = rows.ToList();
+            TotalCount = filtered.Count;
+            TotalPages = Math.Max(1, (int)Math.Ceiling(filtered.Count / (double)PageSize));
+            PageNumber = Math.Min(PageNumber, TotalPages);
 
             Products.Clear();
-            foreach (var row in rows)
+            foreach (var row in filtered.Skip((PageNumber - 1) * PageSize).Take(PageSize))
             {
                 Products.Add(row);
             }
-
-            TotalCount = result.TotalCount;
-            TotalPages = Math.Max(1, result.TotalPages);
         }
         finally
         {
@@ -234,9 +267,13 @@ public sealed partial class InventoryViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void CloseHistory()
+    private async Task CloseHistoryAsync()
     {
         IsViewingHistory = false;
         OnPropertyChanged(nameof(IsShowingOverview));
+
+        // The overview is always reloaded when returning to it.
+        await RefreshSummaryAsync();
+        await LoadAsync();
     }
 }

@@ -30,7 +30,8 @@ public interface IStockAdjustmentService
     /// Draft or Confirmed -> Cancelled. If the adjustment was Confirmed,
     /// first verifies every line's product still has enough current stock
     /// to reverse the full original change; if any line does not, the
-    /// entire cancellation is rejected with no effect at all.
+    /// entire cancellation is rejected with no effect at all. A reason, if
+    /// given, is added to the adjustment's notes.
     /// </summary>
-    Task<Result<StockAdjustmentDetail>> CancelAsync(Guid stockAdjustmentId, CancellationToken cancellationToken = default);
+    Task<Result<StockAdjustmentDetail>> CancelAsync(Guid stockAdjustmentId, string? reason = null, CancellationToken cancellationToken = default);
 }

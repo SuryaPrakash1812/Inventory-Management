@@ -2,6 +2,22 @@ using InventoryManagement.Domain.Enums;
 
 namespace InventoryManagement.Application.Inventory;
 
+/// <summary>A signed change to one product's stock: positive adds, negative removes.</summary>
+public sealed record StockChange(Guid ProductId, decimal Change);
+
+/// <summary>What a change would do to one product's stock.</summary>
+public sealed record StockEffectLine(
+    Guid ProductId,
+    string ProductSku,
+    string ProductName,
+    decimal CurrentStock,
+    decimal Change)
+{
+    public decimal StockAfter => CurrentStock + Change;
+
+    public bool IsPossible => StockAfter >= 0;
+}
+
 /// <summary>
 /// Stock coming IN. MovementType must be one of the "increase" types
 /// (OpeningBalance, PurchaseReceipt, SalesReturn) - AddStockAsync rejects
@@ -55,6 +71,13 @@ public sealed record StockMovementResult(
 public sealed record StockHistoryQuery
 {
     public Guid? ProductId { get; init; }
+
+    /// <summary>Inclusive lower bound on OccurredAtUtc, applied before paging.</summary>
+    public DateTimeOffset? FromDate { get; init; }
+
+    /// <summary>Inclusive upper bound on OccurredAtUtc, applied before paging.</summary>
+    public DateTimeOffset? ToDate { get; init; }
+
     public int PageNumber { get; init; } = 1;
     public int PageSize { get; init; } = 25;
 }

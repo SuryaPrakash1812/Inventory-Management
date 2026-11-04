@@ -46,6 +46,11 @@ public static class SaleWorkflow
             return Result.Failure("Item discount cannot be negative.");
         }
 
+        if (discountAmount > quantity * unitPrice)
+        {
+            return Result.Failure("Item discount cannot be more than the item's amount (quantity x unit price).");
+        }
+
         return Result.Success();
     }
 
@@ -109,12 +114,12 @@ public static class SaleWorkflow
             ? Result.Success()
             : Result.Failure("Sale is already cancelled.");
 
-    /// <summary>Unlike Purchase.Confirm (which only ever adds stock), invoicing a Sale REMOVES stock - it must be checked up front, before touching any line, exactly the same "verify everything, then apply everything" shape Purchase uses for its Cancel-time reversal check.</summary>
-    public static Result EnsureSufficientStockToIssue(decimal currentStock, decimal quantityToIssue) =>
+    /// <summary>Unlike Purchase.Confirm (which only ever adds stock), invoicing a Sale REMOVES stock - it must be checked up front, before touching any line, exactly the same "verify everything, then apply everything" shape Purchase uses for its Cancel-time reversal check. <paramref name="quantityToIssue"/> must be the sale's TOTAL for the product across all of its lines.</summary>
+    public static Result EnsureSufficientStockToIssue(decimal currentStock, decimal quantityToIssue, string? productName = null) =>
         currentStock >= quantityToIssue
             ? Result.Success()
             : Result.Failure(
-                $"Insufficient stock: only {currentStock} available, but {quantityToIssue} requested for one of the items. "
+                $"Insufficient stock: only {currentStock:0.####} available, but {quantityToIssue:0.####} requested for {productName ?? "one of the items"}. "
                     + "Reduce the quantity or restock before invoicing.");
 
     /// <summary>Same offline-safe numbering shape as Purchase/StockAdjustment, distinct prefix so document types are never confused. Used for BOTH SaleNumber (at creation) and InvoiceNumber (at invoicing) - the two are separate sequences.</summary>

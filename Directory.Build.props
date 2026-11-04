@@ -1,6 +1,8 @@
 <Project>
 
   <PropertyGroup>
+    <!-- The one place to change the version: the app's status bar and the installer both read it. -->
+    <Version>0.1.0</Version>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

@@ -69,6 +69,105 @@ public sealed class StockAdjustmentServiceTests : IDisposable
         Assert.Equal(50m, stock); // unchanged - Draft never touches stock
     }
 
+    private SaveDraftStockAdjustmentRequest MakeLinesRequest(params (Guid ProductId, decimal Change)[] lines) =>
+        MakeDraftRequest() with { Items = lines.Select(l => new StockAdjustmentItemRequest(l.ProductId, l.Change, null)).ToList() };
+
+    [Fact]
+    public async Task ConfirmAsync_DecreasesBeyondStockInTotal_Fails_AndChangesNothing()
+    {
+        var created = await _sut.SaveDraftAsync(MakeLinesRequest((_product.Id, -30m), (_product.Id, -30m)));
+
+        var result = await _sut.ConfirmAsync(created.Value.Id);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("Cola", result.Error);
+        Assert.Equal(50m, await _inventoryService.GetCurrentStockAsync(_product.Id));
+        Assert.Empty(await _context.StockMovements.ToListAsync());
+    }
+
+    /// <summary>The order lines were entered must not matter: -60 then +20 is a valid net change of -40 from a stock of 50.</summary>
+    [Fact]
+    public async Task ConfirmAsync_OffsettingLinesOfOneProduct_AreJudgedByTheirNet()
+    {
+        var created = await _sut.SaveDraftAsync(MakeLinesRequest((_product.Id, -60m), (_product.Id, 20m)));
+
+        var confirmed = await _sut.ConfirmAsync(created.Value.Id);
+
+        Assert.True(confirmed.IsSuccess, confirmed.IsFailure ? confirmed.Error : null);
+        Assert.Equal(10m, await _inventoryService.GetCurrentStockAsync(_product.Id));
+
+        var cancelled = await _sut.CancelAsync(created.Value.Id);
+
+        Assert.True(cancelled.IsSuccess, cancelled.IsFailure ? cancelled.Error : null);
+        Assert.Equal(50m, await _inventoryService.GetCurrentStockAsync(_product.Id));
+    }
+
+    /// <summary>Regression: +30 and +30 were each checked alone against a stock of 40, and the first was reversed before the second failed.</summary>
+    [Fact]
+    public async Task CancelAsync_ChecksNetIncreaseAcrossLines_AndChangesNothingWhenShort()
+    {
+        var created = await _sut.SaveDraftAsync(MakeLinesRequest((_product.Id, 30m), (_product.Id, 30m)));
+        await _sut.ConfirmAsync(created.Value.Id);
+        await _inventoryService.RemoveStockAsync(new RemoveStockRequest(
+            _product.Id, 70m, StockMovementType.SaleIssue, StockReferenceType.Sale, Guid.NewGuid()));
+
+        var result = await _sut.CancelAsync(created.Value.Id);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("only 40 remaining, needed 60", result.Error);
+        Assert.Equal(40m, await _inventoryService.GetCurrentStockAsync(_product.Id));
+        Assert.Equal(StockAdjustmentStatus.Confirmed, (await _sut.GetStockAdjustmentByIdAsync(created.Value.Id))!.Status);
+    }
+
+    /// <summary>The larger increase applies first, so its failure-free movement is what must be undone when the second product's movement fails.</summary>
+    [Fact]
+    public async Task ConfirmAsync_WhenALaterLineFails_RollsBackEveryLine()
+    {
+        var other = new Product { Sku = "SKU-2", Name = "Lemonade", Category = _category };
+        _context.Products.Add(other);
+        await _context.SaveChangesAsync();
+
+        var created = await _sut.SaveDraftAsync(MakeLinesRequest((_product.Id, 10m), (other.Id, 4m)));
+
+        var tracked = await _context.Products.SingleAsync(p => p.Id == other.Id);
+        tracked.MarkDeleted(DateTimeOffset.UtcNow, null);
+        await _context.SaveChangesAsync();
+
+        var result = await _sut.ConfirmAsync(created.Value.Id);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(50m, await _inventoryService.GetCurrentStockAsync(_product.Id));
+        Assert.Empty(await _context.StockMovements.ToListAsync());
+        Assert.Equal(StockAdjustmentStatus.Draft, (await _context.StockAdjustments.AsNoTracking().SingleAsync(a => a.Id == created.Value.Id)).Status);
+    }
+
+    [Fact]
+    public async Task CancelAsync_WithReason_AddsItToTheNotes()
+    {
+        var created = await _sut.SaveDraftAsync(MakeDraftRequest());
+
+        var cancelled = await _sut.CancelAsync(created.Value.Id, "  Counted wrong  ");
+
+        Assert.True(cancelled.IsSuccess);
+        Assert.Contains(": Counted wrong", cancelled.Value.Notes);
+    }
+
+    /// <summary>The dialog blocks exactly when the service would: this preview is what it shows for cancelling +30, +30 with 40 left.</summary>
+    [Fact]
+    public async Task PreviewOfReversal_AgreesWithCancelAsync()
+    {
+        var created = await _sut.SaveDraftAsync(MakeLinesRequest((_product.Id, 30m), (_product.Id, 30m)));
+        var confirmed = await _sut.ConfirmAsync(created.Value.Id);
+        await _inventoryService.RemoveStockAsync(new RemoveStockRequest(
+            _product.Id, 70m, StockMovementType.SaleIssue, StockReferenceType.Sale, Guid.NewGuid()));
+
+        var lines = await _inventoryService.PreviewStockChangesAsync(
+            confirmed.Value.Items.Select(i => new StockChange(i.ProductId, -i.QuantityChange)).ToList());
+
+        Assert.False(Assert.Single(lines).IsPossible);
+        Assert.True((await _sut.CancelAsync(created.Value.Id)).IsFailure);
+    }
+
     [Fact]
     public async Task SaveDraftAsync_WithZeroQuantityChange_Fails()
     {
@@ -261,6 +360,7 @@ public sealed class StockAdjustmentServiceTests : IDisposable
     public void Dispose()
     {
         _context.Dispose();
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         if (File.Exists(_databaseFilePath))
         {
             File.Delete(_databaseFilePath);

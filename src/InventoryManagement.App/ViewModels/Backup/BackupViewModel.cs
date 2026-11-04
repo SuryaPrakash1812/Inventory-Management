@@ -1,7 +1,11 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using InventoryManagement.Application.Backup;
+using InventoryManagement.Application.Settings;
+using InventoryManagement.Infrastructure.Common;
 using Microsoft.Win32;
 
 namespace InventoryManagement.App.ViewModels.Backup;
@@ -9,6 +13,7 @@ namespace InventoryManagement.App.ViewModels.Backup;
 public sealed partial class BackupViewModel : ViewModelBase
 {
     private readonly IBackupService _backupService;
+    private readonly ISettingsService _settingsService;
 
     public ObservableCollection<BackupRecordSummary> BackupHistory { get; } = new();
 
@@ -18,11 +23,18 @@ public sealed partial class BackupViewModel : ViewModelBase
     [ObservableProperty]
     private string? _errorMessage;
 
+    [ObservableProperty]
+    private string? _scheduleDescription;
+
     public bool IsNotBusy => !IsBusy;
 
-    public BackupViewModel(IBackupService backupService)
+    public string BackupFolder =>
+        string.IsNullOrWhiteSpace(_settingsService.Current.Backup.Folder) ? AppPaths.BackupsFolder : _settingsService.Current.Backup.Folder!;
+
+    public BackupViewModel(IBackupService backupService, ISettingsService settingsService)
     {
         _backupService = backupService;
+        _settingsService = settingsService;
     }
 
     public async Task InitializeAsync() => await RefreshHistoryAsync();
@@ -36,6 +48,21 @@ public sealed partial class BackupViewModel : ViewModelBase
         {
             BackupHistory.Add(record);
         }
+
+        var preferences = _settingsService.Current.Backup;
+        if (!preferences.AutomaticBackupsEnabled)
+        {
+            ScheduleDescription = "Automatic backups are turned off (Settings > Backup).";
+        }
+        else
+        {
+            var last = await _backupService.GetLastAutomaticBackupTimeAsync();
+            ScheduleDescription =
+                $"Automatic backup every {preferences.AutomaticIntervalHours} hour(s), keeping the newest {preferences.RetentionCount}. "
+                + (last is null ? "No automatic backup has run yet." : $"Last automatic backup: {last.Value.ToLocalTime():g}.");
+        }
+
+        OnPropertyChanged(nameof(BackupFolder));
     }
 
     [RelayCommand]
@@ -52,14 +79,14 @@ public sealed partial class BackupViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsNotBusy));
         try
         {
-            var result = await _backupService.CreateBackupAsync();
+            var result = await _backupService.CreateBackupAsync(_settingsService.Current.Backup.Folder);
             if (result.IsFailure)
             {
                 ErrorMessage = result.Error;
                 return;
             }
 
-            StatusMessage = $"Backup '{result.Value.FileName}' created successfully.";
+            StatusMessage = $"Backup '{result.Value.FileName}' created and verified.";
             await RefreshHistoryAsync();
         }
         finally
@@ -67,6 +94,13 @@ public sealed partial class BackupViewModel : ViewModelBase
             IsBusy = false;
             OnPropertyChanged(nameof(IsNotBusy));
         }
+    }
+
+    [RelayCommand]
+    private void OpenBackupFolder()
+    {
+        Directory.CreateDirectory(BackupFolder);
+        Process.Start(new ProcessStartInfo { FileName = BackupFolder, UseShellExecute = true });
     }
 
     /// <summary>
@@ -85,7 +119,8 @@ public sealed partial class BackupViewModel : ViewModelBase
         var dialog = new OpenFileDialog
         {
             Title = "Select a backup file to restore",
-            Filter = "SQLite database (*.db)|*.db|All files (*.*)|*.*",
+            InitialDirectory = Directory.Exists(BackupFolder) ? BackupFolder : null,
+            Filter = "Inventory Management backup (*.imbak;*.db)|*.imbak;*.db|All files (*.*)|*.*",
         };
 
         if (dialog.ShowDialog() != true)
@@ -106,7 +141,8 @@ public sealed partial class BackupViewModel : ViewModelBase
                 return;
             }
 
-            StatusMessage = "Restore staged successfully. Close and reopen the application to complete the restore.";
+            StatusMessage = "Restore staged successfully. Close and reopen the application to complete the restore. "
+                + "Your current data will be kept as inventory.before-restore.db.";
         }
         finally
         {

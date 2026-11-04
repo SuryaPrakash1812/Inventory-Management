@@ -58,9 +58,38 @@ public sealed record SaveDraftPurchaseRequest(
     string? Notes,
     IReadOnlyList<PurchaseItemRequest> Items);
 
+/// <summary>What cancelling will do to one product's stock - quantities are totalled across all of the purchase's lines for that product.</summary>
+public sealed record PurchaseCancellationLine(
+    Guid ProductId,
+    string ProductSku,
+    string ProductName,
+    decimal QuantityToReverse,
+    decimal CurrentStock)
+{
+    public decimal StockAfter => CurrentStock - QuantityToReverse;
+
+    public bool CanReverse => StockAfter >= 0;
+}
+
+/// <summary>
+/// The effect of cancelling a purchase, worked out before anything changes,
+/// using the same rule CancelPurchaseAsync enforces. Lines is empty when no
+/// stock is affected (a Draft never added any).
+/// </summary>
+public sealed record PurchaseCancellationPreview(
+    Guid PurchaseId,
+    string PurchaseNumber,
+    PurchaseStatus Status,
+    PurchasePaymentStatus PaymentStatus,
+    decimal TotalAmount,
+    IReadOnlyList<PurchaseCancellationLine> Lines)
+{
+    public bool CanCancel => Lines.All(l => l.CanReverse);
+}
+
 public sealed record PurchaseQueryParameters
 {
-    /// <summary>Matched against PurchaseNumber and SupplierInvoiceNumber.</summary>
+    /// <summary>Matched against PurchaseNumber, SupplierInvoiceNumber and the supplier's name.</summary>
     public string? SearchTerm { get; init; }
 
     public Guid? SupplierId { get; init; }

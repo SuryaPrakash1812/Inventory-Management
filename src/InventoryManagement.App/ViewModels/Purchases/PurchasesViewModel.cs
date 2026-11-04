@@ -1,26 +1,46 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
+using InventoryManagement.App.Messages;
+using InventoryManagement.Application.Inventory;
 using InventoryManagement.Application.Products;
 using InventoryManagement.Application.Purchases;
 using InventoryManagement.Application.Suppliers;
+using InventoryManagement.App.Services;
 using InventoryManagement.Domain.Enums;
 
 namespace InventoryManagement.App.ViewModels.Purchases;
 
 public sealed partial class PurchasesViewModel : ViewModelBase
 {
+    /// <summary>The "All" entry at the top of the supplier filter (Id = Guid.Empty means no filter).</summary>
+    private static readonly SupplierSummary AllSuppliers = new(Guid.Empty, "All", null, null, null, null, true);
+
     private readonly IPurchaseService _purchaseService;
     private readonly ISupplierService _supplierService;
     private readonly IProductService _productService;
+    private bool _isInitialized;
 
-    private const int PageSize = 25;
+    [ObservableProperty]
+    private int _pageSize = 10;
+
+    // --- Summary cards (all purchases, regardless of filters) ---
+
+    [ObservableProperty] private int _allPurchaseCount;
+    [ObservableProperty] private int _draftPurchaseCount;
+    [ObservableProperty] private int _awaitingPaymentCount;
+    [ObservableProperty] private decimal _awaitingPaymentAmount;
+    [ObservableProperty] private decimal _confirmedPurchaseValue;
 
     // --- List view state ---
 
     public ObservableCollection<PurchaseSummary> Purchases { get; } = new();
 
     public ObservableCollection<SupplierSummary> Suppliers { get; } = new();
+
+    /// <summary><see cref="Suppliers"/> with "All" first - for the list filter, not the edit form.</summary>
+    public ObservableCollection<SupplierSummary> SupplierFilterOptions { get; } = new();
 
     public IReadOnlyList<string> StatusFilterOptions { get; } = new[] { "All", "Draft", "Confirmed", "Cancelled" };
 
@@ -128,7 +148,8 @@ public sealed partial class PurchasesViewModel : ViewModelBase
 
     public bool CanEditFields => EditingPurchaseId is null || CurrentStatus == PurchaseStatus.Draft;
 
-    public bool CanConfirm => EditingPurchaseId is not null && CurrentStatus == PurchaseStatus.Draft;
+    /// <summary>A brand-new purchase can be confirmed directly - it is saved first.</summary>
+    public bool CanConfirm => CurrentStatus == PurchaseStatus.Draft;
 
     public bool CanCancel => EditingPurchaseId is not null && CurrentStatus != PurchaseStatus.Cancelled;
 
@@ -138,29 +159,122 @@ public sealed partial class PurchasesViewModel : ViewModelBase
 
     public bool IsReadOnlyLineItems => !CanEditFields;
 
+    public bool CanChangePayment => EditingPurchaseId is not null && CurrentStatus == PurchaseStatus.Confirmed;
+
+    public bool IsCancelled => CurrentStatus == PurchaseStatus.Cancelled;
+
+    public bool IsConfirmed => CurrentStatus == PurchaseStatus.Confirmed;
+
+    /// <summary>One sentence saying what state this purchase is in and what can happen next.</summary>
+    public string StatusDescription => CurrentStatus switch
+    {
+        PurchaseStatus.Confirmed => "Confirmed - these items are in stock. Only the payment status can change now. Cancel the purchase to reverse the stock.",
+        PurchaseStatus.Cancelled => _savedPaymentStatus == PurchasePaymentStatus.Unpaid
+            ? "Cancelled - this purchase is closed and any stock it added was reversed."
+            : $"Cancelled - this purchase is closed and any stock it added was reversed. It was marked {_savedPaymentStatus}, so recover that money from the supplier.",
+        _ => "Draft - stock has not changed yet. Confirm the purchase when the items are received.",
+    };
+
+    public string ItemsSubtitle => CanEditFields
+        ? "Scan or type a SKU, barcode or name, then press Enter to add it"
+        : "The items on this purchase";
+
+    /// <summary>Active suppliers, plus this purchase's own supplier if it has since been deactivated.</summary>
+    public ObservableCollection<SupplierSummary> FormSupplierOptions { get; } = new();
+
+    public ConfirmationDialogViewModel Dialog { get; } = new();
+
+    private string _savedFormSnapshot = string.Empty;
+    private PurchasePaymentStatus _savedPaymentStatus = PurchasePaymentStatus.Unpaid;
+
+    /// <summary>Compared with the saved state to tell whether leaving would lose edits.</summary>
+    private string BuildFormSnapshot() => string.Join("|", new object?[]
+    {
+        FormSupplier?.Id, FormSupplierInvoiceNumber, FormPurchaseDate.Date, FormNotes,
+    }.Concat(LineItems.Select(i => (object)$"{i.ProductId}:{i.Quantity}:{i.UnitCost}:{i.DiscountAmount}:{i.TaxPercentage}")));
+
+    private bool HasUnsavedChanges =>
+        (CanEditFields && BuildFormSnapshot() != _savedFormSnapshot)
+        || (CanChangePayment && FormPaymentStatus != _savedPaymentStatus);
+
+    private void RememberSavedState()
+    {
+        _savedFormSnapshot = BuildFormSnapshot();
+        _savedPaymentStatus = FormPaymentStatus;
+    }
+
     public PurchasesViewModel(
-        IPurchaseService purchaseService, ISupplierService supplierService, IProductService productService)
+        IPurchaseService purchaseService, ISupplierService supplierService, IProductService productService, NavigationIntent navigationIntent)
     {
         _purchaseService = purchaseService;
         _supplierService = supplierService;
         _productService = productService;
+        _navigationIntent = navigationIntent;
     }
+
+    private readonly NavigationIntent _navigationIntent;
 
     public async Task InitializeAsync()
     {
+        // Arriving from the global search: show that purchase.
+        if (_navigationIntent.TryTake(typeof(Views.Pages.PurchasesPage), out var search, out _) && search is not null)
+        {
+            SearchTerm = search;
+        }
+
         await RefreshSuppliersAsync();
         await LoadAsync();
+        _isInitialized = true;
     }
 
     private async Task RefreshSuppliersAsync()
     {
         var suppliers = await _supplierService.GetSuppliersAsync(new SupplierQueryParameters { PageSize = 500 });
+        var selectedId = SelectedSupplierFilter?.Id ?? Guid.Empty;
 
         Suppliers.Clear();
+        SupplierFilterOptions.Clear();
+        SupplierFilterOptions.Add(AllSuppliers);
         foreach (var supplier in suppliers.Items)
         {
             Suppliers.Add(supplier);
+            SupplierFilterOptions.Add(supplier);
         }
+
+        SelectedSupplierFilter = SupplierFilterOptions.FirstOrDefault(s => s.Id == selectedId) ?? AllSuppliers;
+    }
+
+    private async Task RefreshStatsAsync()
+    {
+        var all = (await _purchaseService.GetPurchasesAsync(new PurchaseQueryParameters { PageSize = int.MaxValue })).Items;
+        AllPurchaseCount = all.Count;
+        DraftPurchaseCount = all.Count(p => p.Status == PurchaseStatus.Draft);
+        var unpaid = all.Where(p => p.Status == PurchaseStatus.Confirmed && p.PaymentStatus != PurchasePaymentStatus.Paid).ToList();
+        AwaitingPaymentCount = unpaid.Count;
+        AwaitingPaymentAmount = unpaid.Sum(p => p.TotalAmount);
+        ConfirmedPurchaseValue = all.Where(p => p.Status == PurchaseStatus.Confirmed).Sum(p => p.TotalAmount);
+    }
+
+    // Filters apply as soon as they change (the search box applies as you type).
+    partial void OnSelectedSupplierFilterChanged(SupplierSummary? value) => ReloadFromFirstPage();
+
+    partial void OnSelectedStatusFilterChanged(string value) => ReloadFromFirstPage();
+
+    partial void OnFromDateFilterChanged(DateTime? value) => ReloadFromFirstPage();
+
+    partial void OnToDateFilterChanged(DateTime? value) => ReloadFromFirstPage();
+
+    partial void OnPageSizeChanged(int value) => ReloadFromFirstPage();
+
+    private void ReloadFromFirstPage()
+    {
+        if (!_isInitialized)
+        {
+            return;
+        }
+
+        PageNumber = 1;
+        _ = LoadAsync();
     }
 
     [RelayCommand]
@@ -174,7 +288,7 @@ public sealed partial class PurchasesViewModel : ViewModelBase
     private async Task ClearFiltersAsync()
     {
         SearchTerm = string.Empty;
-        SelectedSupplierFilter = null;
+        SelectedSupplierFilter = AllSuppliers;
         SelectedStatusFilter = "All";
         FromDateFilter = null;
         ToDateFilter = null;
@@ -222,7 +336,7 @@ public sealed partial class PurchasesViewModel : ViewModelBase
             var result = await _purchaseService.GetPurchasesAsync(new PurchaseQueryParameters
             {
                 SearchTerm = string.IsNullOrWhiteSpace(SearchTerm) ? null : SearchTerm,
-                SupplierId = SelectedSupplierFilter?.Id,
+                SupplierId = SelectedSupplierFilter is { } supplier && supplier.Id != Guid.Empty ? supplier.Id : null,
                 Status = status,
                 FromDate = FromDateFilter.HasValue ? new DateTimeOffset(FromDateFilter.Value) : null,
                 ToDate = ToDateFilter.HasValue ? new DateTimeOffset(ToDateFilter.Value.AddDays(1).AddTicks(-1)) : null,
@@ -243,6 +357,11 @@ public sealed partial class PurchasesViewModel : ViewModelBase
 
             TotalCount = result.TotalCount;
             TotalPages = Math.Max(1, result.TotalPages);
+
+            // Every save/confirm/cancel/delete ends with a reload, so the
+            // summary cards are refreshed here and never go stale.
+            await RefreshStatsAsync();
+            WeakReferenceMessenger.Default.Send(new StockDataChangedMessage());
         }
         finally
         {
@@ -259,13 +378,15 @@ public sealed partial class PurchasesViewModel : ViewModelBase
         EditingPurchaseId = null;
         CurrentStatus = PurchaseStatus.Draft;
         PurchaseNumberDisplay = "(assigned on save)";
-        FormSupplier = Suppliers.FirstOrDefault();
+        RefreshFormSupplierOptions(keepSupplierId: null);
+        FormSupplier = FormSupplierOptions.FirstOrDefault();
         FormSupplierInvoiceNumber = string.Empty;
         FormPurchaseDate = DateTime.Today;
         FormNotes = string.Empty;
         FormPaymentStatus = PurchasePaymentStatus.Unpaid;
         ProductSearchText = string.Empty;
         ClearLineItems();
+        RememberSavedState();
         IsViewingDetail = true;
 
         RaiseModeChanged();
@@ -292,7 +413,8 @@ public sealed partial class PurchasesViewModel : ViewModelBase
         EditingPurchaseId = null;
         CurrentStatus = detail.Status;
         PurchaseNumberDisplay = detail.PurchaseNumber;
-        FormSupplier = Suppliers.FirstOrDefault(s => s.Id == detail.SupplierId);
+        RefreshFormSupplierOptions(keepSupplierId: detail.SupplierId);
+        FormSupplier = FormSupplierOptions.FirstOrDefault(s => s.Id == detail.SupplierId);
         FormSupplierInvoiceNumber = detail.SupplierInvoiceNumber ?? string.Empty;
         FormPurchaseDate = detail.PurchaseDate.Date;
         FormNotes = detail.Notes ?? string.Empty;
@@ -308,17 +430,49 @@ public sealed partial class PurchasesViewModel : ViewModelBase
         }
 
         EditingPurchaseId = detail.Id;
+        RememberSavedState();
         IsViewingDetail = true;
 
         RaiseModeChanged();
     }
 
+    private void RefreshFormSupplierOptions(Guid? keepSupplierId)
+    {
+        FormSupplierOptions.Clear();
+        foreach (var supplier in Suppliers.Where(s => s.IsActive || s.Id == keepSupplierId))
+        {
+            FormSupplierOptions.Add(supplier);
+        }
+    }
+
+    /// <summary>Back / Close. Asks first if leaving would lose edits.</summary>
     [RelayCommand]
-    private void CancelEdit()
+    private async Task CancelEditAsync()
+    {
+        if (IsViewingDetail && HasUnsavedChanges)
+        {
+            Dialog.Open(
+                "Discard your changes?",
+                "You have changes on this purchase that have not been saved. Leaving now will lose them.",
+                "Discard Changes",
+                "Keep Editing",
+                isDanger: true,
+                CloseDetailAsync);
+            return;
+        }
+
+        await CloseDetailAsync();
+    }
+
+    private async Task CloseDetailAsync()
     {
         IsViewingDetail = false;
         ErrorMessage = null;
         OnPropertyChanged(nameof(IsShowingList));
+
+        // Reloaded on every return: changes can be saved on the detail screen
+        // without leaving it (e.g. Update Payment Status).
+        await LoadAsync();
     }
 
     /// <summary>
@@ -388,23 +542,11 @@ public sealed partial class PurchasesViewModel : ViewModelBase
         // auto-save - is still running. IsEnabled on the button covers
         // mouse clicks, but a KeyBinding invokes the command directly and
         // would bypass that, so the guard belongs here in the method body
-        // too, not just in the UI.
-        if (IsBusy)
+        // too, not just in the UI. The same goes for the screen check: Ctrl+S
+        // from the list used to re-save whichever purchase was last open,
+        // creating a duplicate if that had been a new one.
+        if (IsBusy || Dialog.IsOpen || !IsViewingDetail || !CanEditFields)
         {
-            return;
-        }
-
-        ErrorMessage = null;
-
-        if (FormSupplier is null)
-        {
-            ErrorMessage = "A supplier must be selected.";
-            return;
-        }
-
-        if (LineItems.Count == 0)
-        {
-            ErrorMessage = "Add at least one item before saving.";
             return;
         }
 
@@ -412,26 +554,13 @@ public sealed partial class PurchasesViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsNotBusy));
         try
         {
-            var itemRequests = LineItems
-                .Select(i => new PurchaseItemRequest(i.ProductId, i.Quantity, i.UnitCost, i.DiscountAmount, i.TaxPercentage))
-                .ToList();
-
-            var request = new SaveDraftPurchaseRequest(
-                EditingPurchaseId,
-                FormSupplier.Id,
-                string.IsNullOrWhiteSpace(FormSupplierInvoiceNumber) ? null : FormSupplierInvoiceNumber,
-                new DateTimeOffset(FormPurchaseDate),
-                string.IsNullOrWhiteSpace(FormNotes) ? null : FormNotes,
-                itemRequests);
-
-            var result = await _purchaseService.SaveDraftAsync(request);
-            if (result.IsFailure)
+            var saved = await SaveFormAsync();
+            if (saved is null)
             {
-                ErrorMessage = result.Error;
                 return;
             }
 
-            StatusMessage = $"Purchase {result.Value.PurchaseNumber} saved.";
+            StatusMessage = $"Purchase {saved.PurchaseNumber} saved as a draft.";
             IsViewingDetail = false;
             OnPropertyChanged(nameof(IsShowingList));
             await LoadAsync();
@@ -443,20 +572,97 @@ public sealed partial class PurchasesViewModel : ViewModelBase
         }
     }
 
-    [RelayCommand]
-    private async Task ConfirmAsync()
+    /// <summary>Validates and saves the form as a draft. Returns null (with ErrorMessage set) if it could not be saved.</summary>
+    private async Task<PurchaseDetail?> SaveFormAsync()
     {
-        if (EditingPurchaseId is not { } id || IsBusy)
+        ErrorMessage = null;
+
+        if (FormSupplier is null)
+        {
+            ErrorMessage = "A supplier must be selected.";
+            return null;
+        }
+
+        if (LineItems.Count == 0)
+        {
+            ErrorMessage = "Add at least one item before saving.";
+            return null;
+        }
+
+        var itemRequests = LineItems
+            .Select(i => new PurchaseItemRequest(i.ProductId, i.Quantity, i.UnitCost, i.DiscountAmount, i.TaxPercentage))
+            .ToList();
+
+        var request = new SaveDraftPurchaseRequest(
+            EditingPurchaseId,
+            FormSupplier.Id,
+            string.IsNullOrWhiteSpace(FormSupplierInvoiceNumber) ? null : FormSupplierInvoiceNumber,
+            new DateTimeOffset(FormPurchaseDate),
+            string.IsNullOrWhiteSpace(FormNotes) ? null : FormNotes,
+            itemRequests);
+
+        var result = await _purchaseService.SaveDraftAsync(request);
+        if (result.IsFailure)
+        {
+            ErrorMessage = result.Error;
+            return null;
+        }
+
+        // From here on this is an existing draft, so if the next step (e.g.
+        // confirming) fails, trying again edits it instead of creating another.
+        EditingPurchaseId = result.Value.Id;
+        PurchaseNumberDisplay = result.Value.PurchaseNumber;
+        RememberSavedState();
+        RaiseModeChanged();
+        return result.Value;
+    }
+
+    [RelayCommand]
+    private void Confirm()
+    {
+        if (IsBusy || !CanConfirm)
         {
             return;
         }
 
         ErrorMessage = null;
+        if (FormSupplier is null || LineItems.Count == 0)
+        {
+            ErrorMessage = FormSupplier is null ? "A supplier must be selected." : "Add at least one item before confirming.";
+            return;
+        }
+
+        var units = LineItems.Sum(i => i.Quantity);
+        Dialog.Open(
+            "Confirm this purchase?",
+            $"{units:0.##} unit(s) across {LineItems.Count} item(s) will be added to stock. "
+                + "The purchase can no longer be edited afterwards - it can only be cancelled, which reverses the stock.",
+            "Confirm Purchase",
+            "Not Yet",
+            isDanger: false,
+            ConfirmFormAsync);
+    }
+
+    /// <summary>
+    /// Saves first, so what gets confirmed is what is on screen. Confirming
+    /// straight from the database used to silently ignore unsaved edits, adding
+    /// the old quantities to stock.
+    /// </summary>
+    private async Task ConfirmFormAsync()
+    {
         IsBusy = true;
         OnPropertyChanged(nameof(IsNotBusy));
         try
         {
-            var result = await _purchaseService.ConfirmPurchaseAsync(id);
+            if (EditingPurchaseId is null || HasUnsavedChanges)
+            {
+                if (await SaveFormAsync() is null)
+                {
+                    return;
+                }
+            }
+
+            var result = await _purchaseService.ConfirmPurchaseAsync(EditingPurchaseId!.Value);
             if (result.IsFailure)
             {
                 ErrorMessage = result.Error;
@@ -475,20 +681,88 @@ public sealed partial class PurchasesViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Cancel from the open purchase.</summary>
     [RelayCommand]
     private async Task CancelPurchaseAsync()
     {
-        if (EditingPurchaseId is not { } id || IsBusy)
+        if (EditingPurchaseId is { } id)
+        {
+            await PromptCancelAsync(id);
+        }
+    }
+
+    /// <summary>Cancel from a row of the list.</summary>
+    [RelayCommand]
+    private async Task CancelListedPurchaseAsync(PurchaseSummary purchase) => await PromptCancelAsync(purchase.Id);
+
+    /// <summary>
+    /// Shows what cancelling will do before anything changes. If stock can't
+    /// be reversed the dialog explains why and offers no way to proceed - the
+    /// same rule the service enforces, seen up front instead of after a click.
+    /// </summary>
+    private async Task PromptCancelAsync(Guid id)
+    {
+        if (IsBusy)
         {
             return;
         }
+
+        ErrorMessage = null;
+
+        var previewResult = await _purchaseService.PreviewCancellationAsync(id);
+        if (previewResult.IsFailure)
+        {
+            ErrorMessage = previewResult.Error;
+            return;
+        }
+
+        var preview = previewResult.Value;
+
+        string message;
+        if (preview.Status == PurchaseStatus.Draft)
+        {
+            message = "This draft has not added any stock, so stock will not change. The purchase is kept on record as Cancelled.";
+        }
+        else if (preview.CanCancel)
+        {
+            message = "The stock this purchase added will be removed, as shown below. This cannot be undone.";
+        }
+        else
+        {
+            message = "This purchase can't be cancelled yet: some of its stock has already been used. "
+                + "Cancel the sales that used it, or add the stock back with a stock adjustment, then try again.";
+        }
+
+        string? warning = null;
+        if (preview.CanCancel && preview.PaymentStatus != PurchasePaymentStatus.Unpaid)
+        {
+            warning = $"This purchase is marked {preview.PaymentStatus}. Cancelling will not refund the {preview.TotalAmount:N2} total - "
+                + "recover any money paid from the supplier separately.";
+        }
+
+        Dialog.Open(
+            $"Cancel {preview.PurchaseNumber}?",
+            message,
+            "Cancel Purchase",
+            preview.CanCancel ? "Keep Purchase" : "Close",
+            isDanger: true,
+            () => CancelConfirmedAsync(id),
+            warning,
+            canConfirm: preview.CanCancel,
+            asksReason: preview.CanCancel,
+            stockLines: preview.Lines.Select(l => new StockEffectLine(l.ProductId, l.ProductSku, l.ProductName, l.CurrentStock, -l.QuantityToReverse)));
+    }
+
+    private async Task CancelConfirmedAsync(Guid id)
+    {
+        var reason = Dialog.Reason;
 
         ErrorMessage = null;
         IsBusy = true;
         OnPropertyChanged(nameof(IsNotBusy));
         try
         {
-            var result = await _purchaseService.CancelPurchaseAsync(id);
+            var result = await _purchaseService.CancelPurchaseAsync(id, reason);
             if (result.IsFailure)
             {
                 ErrorMessage = result.Error;
@@ -508,13 +782,24 @@ public sealed partial class PurchasesViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private async Task DeleteDraftAsync()
+    private void DeleteDraft()
     {
         if (EditingPurchaseId is not { } id || IsBusy)
         {
             return;
         }
 
+        Dialog.Open(
+            $"Delete {PurchaseNumberDisplay}?",
+            "This draft will be removed from the list. Stock is not affected.",
+            "Delete Draft",
+            "Keep Draft",
+            isDanger: true,
+            () => DeleteConfirmedAsync(id));
+    }
+
+    private async Task DeleteConfirmedAsync(Guid id)
+    {
         ErrorMessage = null;
         IsBusy = true;
         OnPropertyChanged(nameof(IsNotBusy));
@@ -569,6 +854,7 @@ public sealed partial class PurchasesViewModel : ViewModelBase
             }
             else
             {
+                _savedPaymentStatus = FormPaymentStatus;
                 StatusMessage = $"Payment status set to {FormPaymentStatus}.";
             }
         }
@@ -607,6 +893,11 @@ public sealed partial class PurchasesViewModel : ViewModelBase
         OnPropertyChanged(nameof(CanDelete));
         OnPropertyChanged(nameof(IsNewPurchase));
         OnPropertyChanged(nameof(IsReadOnlyLineItems));
+        OnPropertyChanged(nameof(CanChangePayment));
+        OnPropertyChanged(nameof(IsCancelled));
+        OnPropertyChanged(nameof(IsConfirmed));
+        OnPropertyChanged(nameof(StatusDescription));
+        OnPropertyChanged(nameof(ItemsSubtitle));
         RaiseTotalsChanged();
     }
 

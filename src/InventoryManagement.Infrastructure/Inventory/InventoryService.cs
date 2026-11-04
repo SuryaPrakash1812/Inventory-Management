@@ -40,6 +40,25 @@ public sealed class InventoryService : IInventoryService
             .SingleAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<StockEffectLine>> PreviewStockChangesAsync(
+        IReadOnlyCollection<StockChange> changes, CancellationToken cancellationToken = default)
+    {
+        var productIds = changes.Select(c => c.ProductId).Distinct().ToList();
+        var products = await _context.Products
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(p => productIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.Sku, p.Name, p.QuantityOnHand })
+            .ToDictionaryAsync(p => p.Id, cancellationToken);
+
+        return changes
+            .GroupBy(c => c.ProductId)
+            .Select(g => new StockEffectLine(
+                g.Key, products[g.Key].Sku, products[g.Key].Name, products[g.Key].QuantityOnHand, g.Sum(c => c.Change)))
+            .OrderBy(l => l.ProductName)
+            .ToList();
+    }
+
     public async Task<Result<StockMovementResult>> AddStockAsync(
         AddStockRequest request, CancellationToken cancellationToken = default)
     {
@@ -123,21 +142,35 @@ public sealed class InventoryService : IInventoryService
             movements = movements.Where(m => m.ProductId == productId);
         }
 
-        var totalCount = await movements.CountAsync(cancellationToken);
-
         var pageNumber = Math.Max(1, query.PageNumber);
         var pageSize = query.PageSize <= 0 ? 25 : query.PageSize;
 
-        // Same SQLite DateTimeOffset ORDER BY limitation as everywhere else
-        // in this codebase (see ProductService.ApplySort remarks) - sorted
-        // in memory rather than translated to SQL.
+        // Same SQLite DateTimeOffset limitation as everywhere else in this
+        // codebase (see PurchaseService.GetPurchasesAsync remarks): neither
+        // ORDER BY nor >=/<= on OccurredAtUtc translates to SQL, so the date
+        // filter and the sort both run in memory - but BEFORE paging, so the
+        // date range is applied to all movements, not just one page of them.
         var all = await movements
             .Select(m => new StockHistoryEntry(
                 m.Id, m.ProductId, m.Product.Sku, m.Product.Name, m.MovementType, m.QuantityChange,
                 m.QuantityBalanceAfter, m.ReferenceType, m.ReferenceId, m.OccurredAtUtc, m.PerformedByUserId, m.Notes))
             .ToListAsync(cancellationToken);
 
-        var items = all
+        IEnumerable<StockHistoryEntry> filtered = all;
+        if (query.FromDate is { } fromDate)
+        {
+            filtered = filtered.Where(e => e.OccurredAtUtc >= fromDate);
+        }
+
+        if (query.ToDate is { } toDate)
+        {
+            filtered = filtered.Where(e => e.OccurredAtUtc <= toDate);
+        }
+
+        var filteredList = filtered.ToList();
+        var totalCount = filteredList.Count;
+
+        var items = filteredList
             .OrderByDescending(e => e.OccurredAtUtc)
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
@@ -195,6 +228,11 @@ public sealed class InventoryService : IInventoryService
     /// locking (it serializes ALL concurrent stock changes against each
     /// other, not just ones touching the same product) - that is the "as
     /// far as SQLite permits" tradeoff inherent to this database engine.
+    ///
+    /// ATOMICITY: if the caller already opened a transaction (a document
+    /// moving several lines of stock, e.g. confirming a purchase), this joins
+    /// it and leaves commit/rollback to the caller, so the whole document
+    /// applies or none of it does. Otherwise it runs in its own transaction.
     /// </summary>
     private async Task<Result<StockMovementResult>> ApplyMovementAsync(
         Guid productId,
@@ -206,12 +244,19 @@ public sealed class InventoryService : IInventoryService
         bool allowNegativeStock,
         CancellationToken cancellationToken)
     {
-        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+        // Null when joining the caller's transaction - see method remarks.
+        await using var ownTransaction = _context.Database.CurrentTransaction is null
+            ? await _context.BeginTransactionAsync(cancellationToken)
+            : null;
 
         var product = await _context.Products.SingleOrDefaultAsync(p => p.Id == productId, cancellationToken);
         if (product is null)
         {
-            await transaction.RollbackAsync(cancellationToken);
+            if (ownTransaction is not null)
+            {
+                await ownTransaction.RollbackAsync(cancellationToken);
+            }
+
             return Result.Failure<StockMovementResult>("Product not found.");
         }
 
@@ -223,7 +268,11 @@ public sealed class InventoryService : IInventoryService
 
         if (newBalance < 0 && !allowNegativeStock)
         {
-            await transaction.RollbackAsync(cancellationToken);
+            if (ownTransaction is not null)
+            {
+                await ownTransaction.RollbackAsync(cancellationToken);
+            }
+
             return Result.Failure<StockMovementResult>(
                 $"Insufficient stock: only {product.QuantityOnHand} available, cannot reduce by {-signedQuantityChange}.");
         }
@@ -247,7 +296,11 @@ public sealed class InventoryService : IInventoryService
         product.QuantityOnHand = newBalance;
 
         await _context.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+
+        if (ownTransaction is not null)
+        {
+            await ownTransaction.CommitAsync(cancellationToken);
+        }
 
         return Result.Success(new StockMovementResult(
             movement.Id, productId, signedQuantityChange, newBalance, now));

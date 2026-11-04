@@ -6,14 +6,21 @@ using CommunityToolkit.Mvvm.Messaging;
 using InventoryManagement.App.Messages;
 using InventoryManagement.App.Services;
 using InventoryManagement.App.Views;
+using InventoryManagement.App.ViewModels.Licensing;
 using InventoryManagement.App.Views.Auth;
+using InventoryManagement.App.Views.Licensing;
 using InventoryManagement.Application;
 using InventoryManagement.Application.Auth;
 using InventoryManagement.Application.Common.Interfaces;
 using InventoryManagement.Application.Settings;
 using InventoryManagement.Infrastructure;
+using InventoryManagement.Infrastructure.Backup;
 using InventoryManagement.Infrastructure.Common;
+using InventoryManagement.Infrastructure.Data;
+using InventoryManagement.Infrastructure.Licensing;
 using InventoryManagement.Infrastructure.Logging;
+using InventoryManagement.Infrastructure.Security;
+using InventoryManagement.Licensing;
 using InventoryManagement.Sync;
 using InventoryManagement.Sync.Connectivity;
 using Microsoft.Extensions.Configuration;
@@ -61,7 +68,24 @@ public partial class App : WpfApplication
         {
             Log.Information("Application starting up");
 
+            // Nothing - not even the database - is touched until this PC
+            // holds a valid license issued for it.
+            var license = EnsureLicensed();
+            if (license is null)
+            {
+                Log.Information("No valid license and activation was cancelled - exiting");
+                Shutdown();
+                return;
+            }
+
             ApplyStagedRestoreIfPending();
+
+            var database = await PrepareLocalDatabaseAsync();
+            if (database is null)
+            {
+                Shutdown();
+                return;
+            }
 
             _host = Host.CreateDefaultBuilder()
                 .UseSerilog()
@@ -73,7 +97,7 @@ public partial class App : WpfApplication
                 .ConfigureServices((context, services) =>
                 {
                     services.AddApplication();
-                    services.AddInfrastructure();
+                    services.AddInfrastructure(database, license);
 
                     // Registered AFTER AddInfrastructure deliberately -
                     // Microsoft.Extensions.DependencyInjection resolves the
@@ -118,9 +142,13 @@ public partial class App : WpfApplication
             // theme followed by a switch to the user's actual preference.
             var settingsService = _appScope.ServiceProvider.GetRequiredService<ISettingsService>();
             await settingsService.LoadAsync();
-            // Theme toggling is disabled - always Light, regardless of any
-            // previously saved preference.
+
+            // Light only: the shell and dashboard use a fixed light palette
+            // (Styles/AppTheme.xaml), so a saved Dark/System preference is ignored.
             ThemeApplier.Apply(ThemeMode.Light);
+
+            // Automatic backups run whether or not anyone is signed in.
+            _host.Services.GetRequiredService<AutomaticBackupScheduler>().Start();
 
             WeakReferenceMessenger.Default.Register<LogoutRequestedMessage>(this, OnLogoutRequested);
 
@@ -208,11 +236,88 @@ public partial class App : WpfApplication
     }
 
     /// <summary>
-    /// Registers last-resort handlers for the three places an unhandled
-    /// exception can surface in a WPF app. Every path logs full details via
-    /// Serilog (never shown to the user) and shows a short, friendly message
-    /// instead of letting the process crash silently or with a raw dialog.
+    /// Validates the installed license against this PC's Machine ID and, if
+    /// there is none (or it was issued for another PC), shows the activation
+    /// window until the user loads a valid one or exits. Returns null if they
+    /// exit. Copying the program folder, the AppData folder or the license
+    /// file to another PC ends up here on that PC, because its Machine ID
+    /// differs from the one the license was signed for.
     /// </summary>
+    private static ActiveLicense? EnsureLicensed()
+    {
+        var store = new LicenseStore(AppPaths.LicenseFilePath, new LicenseValidator(), MachineIdentity.GetCurrentMachineId());
+
+        var result = store.ValidateInstalled();
+        if (result.IsValid)
+        {
+            Log.Information("Licensed to {Customer} ({CustomerId}), license {LicenseId}",
+                result.License!.CustomerName, result.License.CustomerId, result.License.LicenseId);
+            return new ActiveLicense(result.License);
+        }
+
+        Log.Warning("No valid license on this PC: {Reason}", result.Error);
+
+        var window = new ActivationWindow(new ActivationViewModel(store, result.Error));
+        if (window.ShowDialog() != true || window.ViewModel.ActivatedLicense is null)
+        {
+            return null;
+        }
+
+        Log.Information("Activated for {Customer} ({CustomerId})",
+            window.ViewModel.ActivatedLicense.CustomerName, window.ViewModel.ActivatedLicense.CustomerId);
+        return new ActiveLicense(window.ViewModel.ActivatedLicense);
+    }
+
+    /// <summary>
+    /// Unlocks (and, on the first run after upgrading, encrypts) the local
+    /// database. If the data on disk cannot be unlocked on this PC - it was
+    /// copied from another PC, or its key file was deleted - nobody can read
+    /// it, so the user is offered a fresh start: the unreadable files are
+    /// moved aside (never deleted) and an empty database is created, into
+    /// which they can then restore one of their backups. Returns null if
+    /// they decline.
+    /// </summary>
+    private static async Task<LocalDatabaseOptions?> PrepareLocalDatabaseAsync()
+    {
+        var keyProvider = new DatabaseKeyProvider(AppPaths.DatabaseKeyFilePath);
+
+        try
+        {
+            return await LocalDatabaseBootstrapper.PrepareAsync(AppPaths.DatabaseFilePath, keyProvider);
+        }
+        catch (DatabaseKeyUnavailableException ex)
+        {
+            Log.Error(ex, "Local database cannot be unlocked on this PC");
+
+            var answer = MessageBox.Show(
+                "The inventory data on this PC cannot be opened. This happens when the data files were copied "
+                    + "from another PC, or the database key file was deleted.\n\n"
+                    + "Start with an empty database? The unreadable files will be moved to a separate folder, "
+                    + "not deleted. You can then restore one of your backups from the Backup page.",
+                "Inventory Management",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (answer != MessageBoxResult.Yes)
+            {
+                return null;
+            }
+
+            var quarantine = Path.Combine(AppPaths.AppDataRoot, $"unreadable-data-{DateTime.Now:yyyyMMdd-HHmmss}");
+            Directory.CreateDirectory(quarantine);
+            foreach (var path in new[] { AppPaths.DatabaseFilePath, AppPaths.DatabaseFilePath + "-wal", AppPaths.DatabaseFilePath + "-shm", AppPaths.DatabaseKeyFilePath })
+            {
+                if (File.Exists(path))
+                {
+                    File.Move(path, Path.Combine(quarantine, Path.GetFileName(path)));
+                }
+            }
+
+            Log.Warning("Unreadable data moved to {Folder}; starting with an empty database", quarantine);
+            return await LocalDatabaseBootstrapper.PrepareAsync(AppPaths.DatabaseFilePath, keyProvider);
+        }
+    }
+
     /// <summary>
     /// The RECONNECT half of online/offline support: without this,
     /// pending Outbox operations would only ever be sent by manually
@@ -269,46 +374,18 @@ public partial class App : WpfApplication
     }
 
     /// <summary>
-    /// Applies a staged restore, if one exists, BEFORE any database
-    /// connection is opened - this is what makes restore safe with this
-    /// application's single long-lived connection per session. See
-    /// BackupService.StageRestoreAsync's remarks: a restore never touches
-    /// the live database file while the app is running, only writes a
-    /// ".pending-restore" file alongside it. This runs at the very start
-    /// of every launch, finds that file if the user requested a restore
-    /// last session, and only then does the actual file swap - at a point
-    /// where nothing else has the database open yet, making the swap
-    /// completely safe.
+    /// Swaps in a restore the user staged last session - see
+    /// <see cref="StagedRestore"/> for why this must happen before any
+    /// database connection is opened.
     /// </summary>
     private static void ApplyStagedRestoreIfPending()
     {
-        var stagedPath = AppPaths.DatabaseFilePath + Infrastructure.Backup.BackupService.PendingRestoreSuffix;
-
-        if (!File.Exists(stagedPath))
-        {
-            return;
-        }
-
         try
         {
-            Log.Information("Pending restore found at {StagedPath} - applying before opening the database", stagedPath);
-
-            // SQLite WAL mode leaves -wal/-shm sidecar files alongside the
-            // main database file - these must be removed too, or the
-            // restored file could be reconciled against stale WAL data
-            // from before the restore, defeating the point of restoring.
-            foreach (var suffix in new[] { string.Empty, "-wal", "-shm" })
+            if (StagedRestore.ApplyIfPending(AppPaths.DatabaseFilePath))
             {
-                var path = AppPaths.DatabaseFilePath + suffix;
-                if (File.Exists(path))
-                {
-                    File.Delete(path);
-                }
+                Log.Information("Staged restore applied; the previous database was kept as inventory.before-restore.db");
             }
-
-            File.Move(stagedPath, AppPaths.DatabaseFilePath);
-
-            Log.Information("Restore applied successfully");
         }
         catch (Exception ex)
         {
@@ -320,6 +397,12 @@ public partial class App : WpfApplication
         }
     }
 
+    /// <summary>
+    /// Registers last-resort handlers for the three places an unhandled
+    /// exception can surface in a WPF app. Every path logs full details via
+    /// Serilog (never shown to the user) and shows a short, friendly message
+    /// instead of letting the process crash silently or with a raw dialog.
+    /// </summary>
     private void RegisterGlobalExceptionHandlers()
     {
         // Exceptions thrown on the UI thread during event handling.

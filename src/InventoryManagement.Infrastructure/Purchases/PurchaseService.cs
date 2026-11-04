@@ -5,9 +5,11 @@ using InventoryManagement.Application.Inventory;
 using InventoryManagement.Application.Purchases;
 using InventoryManagement.Contracts.Purchases;
 using InventoryManagement.Core.Common;
+using InventoryManagement.Domain.Common;
 using InventoryManagement.Domain.Entities;
 using InventoryManagement.Domain.Enums;
 using InventoryManagement.Domain.Purchases;
+using InventoryManagement.Infrastructure.Common;
 using InventoryManagement.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -105,11 +107,15 @@ public sealed class PurchaseService : IPurchaseService
         // earlier operation in this session left tracked.
         _context.ChangeTracker.Clear();
 
-        var validationError = await ValidateAsync(request.SupplierId, request.Items, cancellationToken);
+        var validationError = await ValidateAsync(request.PurchaseId, request.SupplierId, request.Items, cancellationToken);
         if (validationError is not null)
         {
             return Result.Failure<PurchaseDetail>(validationError);
         }
+
+        // The old items are bulk-deleted below, straight against the database:
+        // without this, a failure in the final save would lose them.
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
 
         Purchase purchase;
         AuditAction auditAction;
@@ -228,6 +234,7 @@ public sealed class PurchaseService : IPurchaseService
             auditAction, nameof(Purchase), purchase.Id,
             $"Purchase '{purchase.PurchaseNumber}' draft saved with {request.Items.Count} item(s).", cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return Result.Success(await ToDetailByIdAsync(purchase.Id, cancellationToken));
     }
@@ -303,6 +310,13 @@ public sealed class PurchaseService : IPurchaseService
             return Result.Failure<PurchaseDetail>(confirmGuard.Error!);
         }
 
+        // All-or-nothing: every stock movement and the status change commit
+        // together. InventoryService joins this transaction, so a failure on
+        // a later line also undoes the earlier ones - otherwise the purchase
+        // would still be Draft with part of its stock already added, and
+        // confirming again would add that part twice.
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+
         foreach (var item in purchase.Items)
         {
             var addResult = await _inventoryService.AddStockAsync(new AddStockRequest(
@@ -315,6 +329,8 @@ public sealed class PurchaseService : IPurchaseService
 
             if (addResult.IsFailure)
             {
+                await transaction.RollbackAsync(cancellationToken);
+                _context.ChangeTracker.Clear();
                 return Result.Failure<PurchaseDetail>(
                     $"Failed to update stock for one of the items: {addResult.Error}");
             }
@@ -329,12 +345,70 @@ public sealed class PurchaseService : IPurchaseService
             $"Purchase '{purchase.PurchaseNumber}' confirmed - stock updated for {purchase.Items.Count} item(s).",
             cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return Result.Success(await ToDetailByIdAsync(purchase.Id, cancellationToken));
     }
 
-    public async Task<Result<PurchaseDetail>> CancelPurchaseAsync(
+    public async Task<Result<PurchaseCancellationPreview>> PreviewCancellationAsync(
         Guid purchaseId, CancellationToken cancellationToken = default)
+    {
+        var purchase = await _context.Purchases
+            .AsNoTracking()
+            .Include(p => p.Items)
+            .SingleOrDefaultAsync(p => p.Id == purchaseId, cancellationToken);
+
+        if (purchase is null)
+        {
+            return Result.Failure<PurchaseCancellationPreview>("Purchase not found.");
+        }
+
+        var cancelGuard = PurchaseWorkflow.EnsureCancellable(purchase.Status);
+        if (cancelGuard.IsFailure)
+        {
+            return Result.Failure<PurchaseCancellationPreview>(cancelGuard.Error!);
+        }
+
+        return Result.Success(new PurchaseCancellationPreview(
+            purchase.Id,
+            purchase.PurchaseNumber,
+            purchase.Status,
+            purchase.PaymentStatus,
+            purchase.TotalAmount,
+            await BuildCancellationLinesAsync(purchase, cancellationToken)));
+    }
+
+    /// <summary>
+    /// One entry per product, totalled across the purchase's lines, so the
+    /// stock check sees the whole amount being reversed. Empty unless the
+    /// purchase is Confirmed - a Draft never added any stock.
+    /// </summary>
+    private async Task<IReadOnlyList<PurchaseCancellationLine>> BuildCancellationLinesAsync(
+        Purchase purchase, CancellationToken cancellationToken)
+    {
+        if (purchase.Status != PurchaseStatus.Confirmed)
+        {
+            return Array.Empty<PurchaseCancellationLine>();
+        }
+
+        var productIds = purchase.Items.Select(i => i.ProductId).Distinct().ToList();
+        var products = await _context.Products
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(p => productIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.Sku, p.Name, p.QuantityOnHand })
+            .ToDictionaryAsync(p => p.Id, cancellationToken);
+
+        return purchase.Items
+            .GroupBy(i => i.ProductId)
+            .Select(g => new PurchaseCancellationLine(
+                g.Key, products[g.Key].Sku, products[g.Key].Name, g.Sum(i => i.Quantity), products[g.Key].QuantityOnHand))
+            .OrderBy(l => l.ProductName)
+            .ToList();
+    }
+
+    public async Task<Result<PurchaseDetail>> CancelPurchaseAsync(
+        Guid purchaseId, string? reason = null, CancellationToken cancellationToken = default)
     {
         _context.ChangeTracker.Clear();
 
@@ -355,48 +429,59 @@ public sealed class PurchaseService : IPurchaseService
             return Result.Failure<PurchaseDetail>(cancelGuard.Error!);
         }
 
-        if (purchase.Status == PurchaseStatus.Confirmed)
+        // Safe business rule: never partially reverse or force stock negative.
+        // Every product must have enough remaining stock to fully reverse
+        // before ANY of them are touched.
+        var lines = await BuildCancellationLinesAsync(purchase, cancellationToken);
+        foreach (var line in lines)
         {
-            // Safe business rule: never partially reverse or force stock
-            // negative. Every line must have enough remaining stock to fully
-            // reverse before ANY of them are touched.
-            foreach (var item in purchase.Items)
+            var stockGuard = PurchaseWorkflow.EnsureSufficientStockToReverse(line.CurrentStock, line.QuantityToReverse, line.ProductName);
+            if (stockGuard.IsFailure)
             {
-                var currentStock = await _inventoryService.GetCurrentStockAsync(item.ProductId, cancellationToken);
-
-                var stockGuard = PurchaseWorkflow.EnsureSufficientStockToReverse(currentStock, item.Quantity);
-                if (stockGuard.IsFailure)
-                {
-                    return Result.Failure<PurchaseDetail>(stockGuard.Error!);
-                }
+                return Result.Failure<PurchaseDetail>(stockGuard.Error!);
             }
+        }
 
-            foreach (var item in purchase.Items)
+        // All-or-nothing - see ConfirmPurchaseAsync.
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+
+        foreach (var line in lines)
+        {
+            var removeResult = await _inventoryService.RemoveStockAsync(new RemoveStockRequest(
+                line.ProductId,
+                line.QuantityToReverse,
+                StockMovementType.PurchaseReturn,
+                StockReferenceType.Purchase,
+                purchase.Id,
+                $"Purchase {purchase.PurchaseNumber} cancelled"), cancellationToken);
+
+            if (removeResult.IsFailure)
             {
-                var removeResult = await _inventoryService.RemoveStockAsync(new RemoveStockRequest(
-                    item.ProductId,
-                    item.Quantity,
-                    StockMovementType.PurchaseReturn,
-                    StockReferenceType.Purchase,
-                    purchase.Id,
-                    $"Purchase {purchase.PurchaseNumber} cancelled"), cancellationToken);
-
-                if (removeResult.IsFailure)
-                {
-                    return Result.Failure<PurchaseDetail>(
-                        $"Failed to reverse stock for one of the items: {removeResult.Error}");
-                }
+                await transaction.RollbackAsync(cancellationToken);
+                _context.ChangeTracker.Clear();
+                return Result.Failure<PurchaseDetail>(
+                    $"Failed to reverse stock for {line.ProductName}: {removeResult.Error}");
             }
         }
 
         purchase.Status = PurchaseStatus.Cancelled;
 
-        EnqueueOutboxOperation("Purchase.Cancel", purchase.Id, new CancelPurchaseContract(purchase.Id));
+        var trimmedReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        if (trimmedReason is not null)
+        {
+            purchase.Notes = CancellationNote.Append(purchase.Notes, trimmedReason, _dateTimeProvider.UtcNow);
+        }
+
+        EnqueueOutboxOperation("Purchase.Cancel", purchase.Id, new CancelPurchaseContract(purchase.Id, trimmedReason));
 
         await _auditLogger.LogAsync(
             AuditAction.Updated, nameof(Purchase), purchase.Id,
-            $"Purchase '{purchase.PurchaseNumber}' cancelled.", cancellationToken);
+            trimmedReason is null
+                ? $"Purchase '{purchase.PurchaseNumber}' cancelled."
+                : $"Purchase '{purchase.PurchaseNumber}' cancelled: {trimmedReason}",
+            cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return Result.Success(await ToDetailByIdAsync(purchase.Id, cancellationToken));
     }
@@ -410,6 +495,12 @@ public sealed class PurchaseService : IPurchaseService
         if (purchase is null)
         {
             return Result.Failure<PurchaseDetail>("Purchase not found.");
+        }
+
+        var paymentGuard = PurchaseWorkflow.EnsurePaymentStatusChangeable(purchase.Status);
+        if (paymentGuard.IsFailure)
+        {
+            return Result.Failure<PurchaseDetail>(paymentGuard.Error!);
         }
 
         purchase.PaymentStatus = paymentStatus;
@@ -431,10 +522,11 @@ public sealed class PurchaseService : IPurchaseService
 
         if (!string.IsNullOrWhiteSpace(query.SearchTerm))
         {
-            var term = query.SearchTerm.Trim();
+            var pattern = SearchPattern.Contains(query.SearchTerm.Trim());
             purchases = purchases.Where(p =>
-                p.PurchaseNumber.Contains(term)
-                || (p.SupplierInvoiceNumber != null && p.SupplierInvoiceNumber.Contains(term)));
+                EF.Functions.Like(p.PurchaseNumber, pattern, SearchPattern.Escape)
+                || (p.SupplierInvoiceNumber != null && EF.Functions.Like(p.SupplierInvoiceNumber, pattern, SearchPattern.Escape))
+                || EF.Functions.Like(p.Supplier.Name, pattern, SearchPattern.Escape));
         }
 
         if (query.SupplierId is { } supplierId)
@@ -456,7 +548,7 @@ public sealed class PurchaseService : IPurchaseService
     }
 
     private async Task<string?> ValidateAsync(
-        Guid supplierId, IReadOnlyList<PurchaseItemRequest> items, CancellationToken cancellationToken)
+        Guid? purchaseId, Guid supplierId, IReadOnlyList<PurchaseItemRequest> items, CancellationToken cancellationToken)
     {
         var hasItemsCheck = PurchaseWorkflow.ValidateHasItems(items.Count);
         if (hasItemsCheck.IsFailure)
@@ -464,10 +556,21 @@ public sealed class PurchaseService : IPurchaseService
             return hasItemsCheck.Error;
         }
 
-        var supplierExists = await _context.Suppliers.AnyAsync(s => s.Id == supplierId, cancellationToken);
-        if (!supplierExists)
+        var supplier = await _context.Suppliers
+            .Where(s => s.Id == supplierId)
+            .Select(s => new { s.Name, s.IsActive })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (supplier is null)
         {
             return "Selected supplier does not exist.";
+        }
+
+        // An existing draft may keep the supplier it already has even if that
+        // supplier was deactivated later; it just can't newly choose one.
+        if (!supplier.IsActive
+            && !await _context.Purchases.AnyAsync(p => p.Id == purchaseId && p.SupplierId == supplierId, cancellationToken))
+        {
+            return $"Supplier '{supplier.Name}' is inactive. Choose an active supplier or reactivate this one.";
         }
 
         foreach (var item in items)

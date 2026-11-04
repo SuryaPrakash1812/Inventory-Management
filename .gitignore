@@ -4,6 +4,8 @@
 [Dd]ebug/
 [Rr]elease/
 out/
+/installer/publish/
+/installer/output/
 
 # Visual Studio
 .vs/
@@ -35,6 +37,12 @@ out/
 *.db-wal
 appsettings.*.local.json
 *.pfx
+
+# Vendor license-signing keys and issued licenses - anyone holding the key
+# file can issue licenses, so it must never be committed.
+/keys/
+vendor-keys*.json
+*.lic
 
 # Logs and backups produced at runtime
 /logs/

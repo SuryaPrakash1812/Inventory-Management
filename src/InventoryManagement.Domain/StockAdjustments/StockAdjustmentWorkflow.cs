@@ -54,14 +54,26 @@ public static class StockAdjustmentWorkflow
             ? Result.Success()
             : Result.Failure("Stock adjustment is already cancelled.");
 
-    /// <summary>Safe business rule: never let reversing a confirmed increase force stock negative - mirrors PurchaseWorkflow.EnsureSufficientStockToReverse.</summary>
-    public static Result EnsureSufficientStockToReverse(decimal currentStock, decimal originalIncreaseQuantity) =>
+    /// <summary>
+    /// Confirming must not take a product below zero. <paramref name="netChange"/>
+    /// is the adjustment's total for the product across all of its lines, so
+    /// -10 and +10 on the same product are judged together, not separately.
+    /// </summary>
+    public static Result EnsureChangeKeepsStockNonNegative(decimal currentStock, decimal netChange, string? productName = null) =>
+        currentStock + netChange >= 0
+            ? Result.Success()
+            : Result.Failure(
+                $"Cannot confirm: this would take {productName ?? "one of the items"} below zero "
+                    + $"(only {currentStock:0.####} in stock, change of {netChange:0.####}).");
+
+    /// <summary>Safe business rule: never let reversing a confirmed increase force stock negative - mirrors PurchaseWorkflow.EnsureSufficientStockToReverse. <paramref name="originalIncreaseQuantity"/> must be the adjustment's net increase for the product across all of its lines.</summary>
+    public static Result EnsureSufficientStockToReverse(decimal currentStock, decimal originalIncreaseQuantity, string? productName = null) =>
         currentStock >= originalIncreaseQuantity
             ? Result.Success()
             : Result.Failure(
-                "Cannot cancel: some of this adjustment's added stock has already been used elsewhere "
-                    + $"(only {currentStock} remaining, needed {originalIncreaseQuantity} to fully reverse). "
-                    + "Reduce usage of the affected product(s) before cancelling.");
+                $"Cannot cancel: some of the stock this adjustment added to {productName ?? "one of the items"} has already been used elsewhere "
+                    + $"(only {currentStock:0.####} remaining, needed {originalIncreaseQuantity:0.####} to fully reverse). "
+                    + "Add the stock back or cancel what used it, then try again.");
 
     /// <summary>Same collision-safe, offline-only numbering shape as PurchaseWorkflow.FormatPurchaseNumber - a different prefix so the two document types are never confused.</summary>
     public static string FormatAdjustmentNumber(string clientTag, int sequence) => $"ADJ-{clientTag}-{sequence:D5}";

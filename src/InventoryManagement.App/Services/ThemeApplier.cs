@@ -25,6 +25,11 @@ public static class ThemeApplier
         };
 
         ApplicationThemeManager.Apply(resolved, WindowBackdropType.Mica);
+
+        // The brand blue from Styles/AppTheme.xaml, so WPF-UI's own primary
+        // buttons, checkboxes and focus accents match the shell design
+        // instead of following the Windows accent colour.
+        ApplicationAccentColorManager.Apply(System.Windows.Media.Color.FromRgb(0x25, 0x63, 0xEB), resolved);
     }
 
     /// <summary>

@@ -1,0 +1,90 @@
+<ui:FluentWindow x:Class="InventoryManagement.App.Views.Licensing.ActivationWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="Activate Inventory Management"
+                 Height="540"
+                 Width="520"
+                 ResizeMode="NoResize"
+                 WindowStartupLocation="CenterScreen"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica"
+                 WindowCornerPreference="Round">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar Grid.Row="0"
+                     Title="Inventory Management"
+                     ShowMaximize="False"
+                     ShowMinimize="False" />
+
+        <StackPanel Grid.Row="1"
+                    VerticalAlignment="Center"
+                    HorizontalAlignment="Center"
+                    Width="420">
+
+            <ui:TextBlock Text="Activate this PC"
+                          FontTypography="Title"
+                          HorizontalAlignment="Center"
+                          Margin="0,0,0,8" />
+
+            <ui:TextBlock Text="This copy of Inventory Management is licensed to one PC. Send the Machine ID below to your vendor. They will send you a license file for this PC, which you then load here."
+                          FontTypography="Body"
+                          Opacity="0.7"
+                          TextWrapping="Wrap"
+                          TextAlignment="Center"
+                          Margin="0,0,0,24" />
+
+            <ui:TextBlock Text="Machine ID" FontTypography="BodyStrong" Margin="0,0,0,6" />
+            <Grid Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <ui:TextBox Grid.Column="0"
+                            Text="{Binding MachineId, Mode=OneWay}"
+                            IsReadOnly="True"
+                            FontFamily="Consolas"
+                            FontSize="15"
+                            ClearButtonEnabled="False"
+                            Margin="0,0,8,0" />
+                <ui:Button Grid.Column="1"
+                           Content="Copy"
+                           Icon="{ui:SymbolIcon Copy24}"
+                           Command="{Binding CopyMachineIdCommand}" />
+            </Grid>
+
+            <ui:TextBlock Text="{Binding StatusMessage}"
+                          FontTypography="Caption"
+                          Foreground="Green"
+                          Margin="0,0,0,16"
+                          Visibility="{Binding StatusMessage, Converter={StaticResource StringToVisibility}}" />
+
+            <ui:Button Content="Load License File..."
+                       Command="{Binding LoadLicenseFileCommand}"
+                       Appearance="Primary"
+                       HorizontalAlignment="Stretch"
+                       HorizontalContentAlignment="Center"
+                       Margin="0,16,0,8" />
+
+            <ui:Button Content="Exit"
+                       Click="OnExitClick"
+                       HorizontalAlignment="Stretch"
+                       HorizontalContentAlignment="Center" />
+
+            <ui:TextBlock Text="{Binding ErrorMessage}"
+                          Foreground="IndianRed"
+                          FontTypography="Caption"
+                          TextWrapping="Wrap"
+                          TextAlignment="Center"
+                          HorizontalAlignment="Center"
+                          Margin="0,16,0,0"
+                          Visibility="{Binding ErrorMessage, Converter={StaticResource StringToVisibility}}" />
+        </StackPanel>
+    </Grid>
+</ui:FluentWindow>

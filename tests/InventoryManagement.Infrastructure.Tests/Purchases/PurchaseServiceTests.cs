@@ -290,11 +290,171 @@ public class PurchaseServiceTests : IDisposable
     public async Task SetPaymentStatusAsync_UpdatesStatus()
     {
         var created = await _sut.SaveDraftAsync(MakeDraftRequest());
+        await _sut.ConfirmPurchaseAsync(created.Value.Id);
 
         var result = await _sut.SetPaymentStatusAsync(created.Value.Id, PurchasePaymentStatus.Paid);
 
         Assert.True(result.IsSuccess);
         Assert.Equal(PurchasePaymentStatus.Paid, result.Value.PaymentStatus);
+    }
+
+    [Fact]
+    public async Task SetPaymentStatusAsync_OnDraftOrCancelled_Fails()
+    {
+        var created = await _sut.SaveDraftAsync(MakeDraftRequest());
+
+        Assert.True((await _sut.SetPaymentStatusAsync(created.Value.Id, PurchasePaymentStatus.Paid)).IsFailure);
+
+        await _sut.CancelPurchaseAsync(created.Value.Id);
+
+        Assert.True((await _sut.SetPaymentStatusAsync(created.Value.Id, PurchasePaymentStatus.Paid)).IsFailure);
+        Assert.Equal(PurchasePaymentStatus.Unpaid, (await _sut.GetPurchaseByIdAsync(created.Value.Id))!.PaymentStatus);
+    }
+
+    /// <summary>
+    /// Regression: stock was checked one line at a time, so two lines of the
+    /// same product each passed against stock that could not cover both, and
+    /// the first line was reversed before the second failed.
+    /// </summary>
+    [Fact]
+    public async Task CancelPurchaseAsync_ChecksTotalAcrossLinesOfTheSameProduct_AndChangesNothingWhenShort()
+    {
+        var created = await _sut.SaveDraftAsync(MakeDraftRequest() with
+        {
+            Items = new[]
+            {
+                new PurchaseItemRequest(_product.Id, 10, 5, 0, 0),
+                new PurchaseItemRequest(_product.Id, 5, 5, 0, 0),
+            },
+        });
+        await _sut.ConfirmPurchaseAsync(created.Value.Id);
+        await _inventoryService.RemoveStockAsync(new RemoveStockRequest(
+            _product.Id, 3m, StockMovementType.SaleIssue, StockReferenceType.Sale, Guid.NewGuid()));
+
+        var result = await _sut.CancelPurchaseAsync(created.Value.Id);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("only 12 of 15 remaining for Cola", result.Error);
+        Assert.Equal(12m, await _inventoryService.GetCurrentStockAsync(_product.Id));
+        Assert.Equal(PurchaseStatus.Confirmed, (await _sut.GetPurchaseByIdAsync(created.Value.Id))!.Status);
+    }
+
+    [Fact]
+    public async Task CancelPurchaseAsync_ReversesTotalAcrossLinesOfTheSameProduct()
+    {
+        var created = await _sut.SaveDraftAsync(MakeDraftRequest() with
+        {
+            Items = new[]
+            {
+                new PurchaseItemRequest(_product.Id, 10, 5, 0, 0),
+                new PurchaseItemRequest(_product.Id, 5, 5, 0, 0),
+            },
+        });
+        await _sut.ConfirmPurchaseAsync(created.Value.Id);
+
+        var result = await _sut.CancelPurchaseAsync(created.Value.Id);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0m, await _inventoryService.GetCurrentStockAsync(_product.Id));
+    }
+
+    [Fact]
+    public async Task CancelPurchaseAsync_WithReason_AddsItToTheNotes()
+    {
+        var created = await _sut.SaveDraftAsync(MakeDraftRequest());
+
+        var result = await _sut.CancelPurchaseAsync(created.Value.Id, "  Wrong supplier  ");
+
+        Assert.Contains("Test purchase", result.Value.Notes);
+        Assert.Contains("Wrong supplier", result.Value.Notes);
+    }
+
+    [Fact]
+    public async Task ConfirmPurchaseAsync_WhenALaterLineFails_RollsBackEveryLine()
+    {
+        var other = new Product { Sku = "SKU-2", Name = "Lemonade", Category = _category };
+        _context.Products.Add(other);
+        await _context.SaveChangesAsync();
+
+        var created = await _sut.SaveDraftAsync(MakeDraftRequest() with
+        {
+            Items = new[]
+            {
+                new PurchaseItemRequest(_product.Id, 10, 5, 0, 0),
+                new PurchaseItemRequest(other.Id, 4, 5, 0, 0),
+            },
+        });
+
+        // Product filtered out of queries by soft-delete, so its movement fails.
+        other.MarkDeleted(DateTimeOffset.UtcNow, null);
+        _context.Entry(other).State = EntityState.Modified;
+        await _context.SaveChangesAsync();
+
+        var result = await _sut.ConfirmPurchaseAsync(created.Value.Id);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(0m, await _inventoryService.GetCurrentStockAsync(_product.Id));
+        Assert.Empty(await _context.StockMovements.ToListAsync());
+        Assert.Equal(PurchaseStatus.Draft, (await _sut.GetPurchaseByIdAsync(created.Value.Id))!.Status);
+    }
+
+    [Fact]
+    public async Task PreviewCancellationAsync_ShowsStockEffect_WithoutChangingAnything()
+    {
+        var created = await _sut.SaveDraftAsync(MakeDraftRequest(quantity: 30));
+        await _sut.ConfirmPurchaseAsync(created.Value.Id);
+        await _inventoryService.RemoveStockAsync(new RemoveStockRequest(
+            _product.Id, 25m, StockMovementType.SaleIssue, StockReferenceType.Sale, Guid.NewGuid()));
+
+        var preview = await _sut.PreviewCancellationAsync(created.Value.Id);
+
+        Assert.False(preview.Value.CanCancel);
+        var line = Assert.Single(preview.Value.Lines);
+        Assert.Equal(30m, line.QuantityToReverse);
+        Assert.Equal(5m, line.CurrentStock);
+        Assert.Equal(-25m, line.StockAfter);
+        Assert.Equal(5m, await _inventoryService.GetCurrentStockAsync(_product.Id));
+    }
+
+    [Fact]
+    public async Task PreviewCancellationAsync_OnDraft_HasNoStockEffect_AndOnCancelledFails()
+    {
+        var created = await _sut.SaveDraftAsync(MakeDraftRequest());
+
+        var preview = await _sut.PreviewCancellationAsync(created.Value.Id);
+        Assert.True(preview.Value.CanCancel);
+        Assert.Empty(preview.Value.Lines);
+
+        await _sut.CancelPurchaseAsync(created.Value.Id);
+        Assert.True((await _sut.PreviewCancellationAsync(created.Value.Id)).IsFailure);
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_NewPurchaseWithInactiveSupplier_Fails_ButExistingDraftMayKeepIt()
+    {
+        var existing = await _sut.SaveDraftAsync(MakeDraftRequest());
+
+        _supplier.IsActive = false;
+        _context.Entry(_supplier).State = EntityState.Modified;
+        await _context.SaveChangesAsync();
+
+        var newPurchase = await _sut.SaveDraftAsync(MakeDraftRequest());
+        var editedDraft = await _sut.SaveDraftAsync(MakeDraftRequest(existing.Value.Id));
+
+        Assert.True(newPurchase.IsFailure);
+        Assert.Contains("inactive", newPurchase.Error);
+        Assert.True(editedDraft.IsSuccess);
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_DiscountAboveLineAmount_Fails()
+    {
+        var result = await _sut.SaveDraftAsync(MakeDraftRequest() with
+        {
+            Items = new[] { new PurchaseItemRequest(_product.Id, 2, 5, DiscountAmount: 11, TaxPercentage: 0) },
+        });
+
+        Assert.True(result.IsFailure);
     }
 
     [Fact]
@@ -496,6 +656,7 @@ public class PurchaseServiceTests : IDisposable
     public async Task SetPaymentStatusAsync_QueuesAPurchaseSetPaymentStatusOutboxOperation()
     {
         var created = await _sut.SaveDraftAsync(MakeDraftRequest());
+        await _sut.ConfirmPurchaseAsync(created.Value.Id);
 
         await _sut.SetPaymentStatusAsync(created.Value.Id, PurchasePaymentStatus.Paid);
 

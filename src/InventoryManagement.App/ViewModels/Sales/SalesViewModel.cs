@@ -1,25 +1,46 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
+using InventoryManagement.App.Messages;
 using InventoryManagement.Application.Customers;
+using InventoryManagement.Application.Inventory;
 using InventoryManagement.Application.Products;
 using InventoryManagement.Application.Sales;
+using InventoryManagement.App.Services;
 using InventoryManagement.Domain.Enums;
 
 namespace InventoryManagement.App.ViewModels.Sales;
 
 public sealed partial class SalesViewModel : ViewModelBase
 {
+    /// <summary>The "All" entry at the top of the customer filter (Id = Guid.Empty means no filter).</summary>
+    private static readonly CustomerSummary AllCustomers = new(Guid.Empty, "All", null, null, null, true);
+
     private readonly ISaleService _saleService;
     private readonly ICustomerService _customerService;
     private readonly IProductService _productService;
+    private readonly IInventoryService _inventoryService;
 
-    private const int PageSize = 25;
     private int _loadRequestVersion;
+    private bool _isInitialized;
+
+    [ObservableProperty]
+    private int _pageSize = 10;
+
+    // --- Summary cards (all sales, regardless of filters) ---
+
+    [ObservableProperty] private int _allSaleCount;
+    [ObservableProperty] private int _draftSaleCount;
+    [ObservableProperty] private int _invoicedSaleCount;
+    [ObservableProperty] private decimal _invoicedSaleValue;
 
     public ObservableCollection<SaleSummary> Sales { get; } = new();
 
     public ObservableCollection<CustomerSummary> Customers { get; } = new();
+
+    /// <summary><see cref="Customers"/> with "All" first - for the list filter, not the edit form.</summary>
+    public ObservableCollection<CustomerSummary> CustomerFilterOptions { get; } = new();
 
     public IReadOnlyList<string> StatusFilterOptions { get; } = new[] { "All", "Draft", "Invoiced", "Cancelled" };
 
@@ -106,28 +127,92 @@ public sealed partial class SalesViewModel : ViewModelBase
 
     public bool IsReadOnlyLineItems => !CanEditFields;
 
-    public SalesViewModel(ISaleService saleService, ICustomerService customerService, IProductService productService)
+    public ConfirmationDialogViewModel Dialog { get; } = new();
+
+    private string _savedFormSnapshot = string.Empty;
+
+    /// <summary>Compared with the saved state to tell whether leaving would lose edits.</summary>
+    private string BuildFormSnapshot() => string.Join("|", new object?[]
+    {
+        FormCustomer?.Id, FormSaleDate.Date, FormNotes,
+    }.Concat(LineItems.Select(i => (object)$"{i.ProductId}:{i.Quantity:0.####}:{i.UnitPrice:0.####}:{i.DiscountAmount:0.####}")));
+
+    private bool HasUnsavedChanges => CanEditFields && BuildFormSnapshot() != _savedFormSnapshot;
+
+    private readonly NavigationIntent _navigationIntent;
+
+    public SalesViewModel(
+        ISaleService saleService, ICustomerService customerService, IProductService productService,
+        IInventoryService inventoryService, NavigationIntent navigationIntent)
     {
         _saleService = saleService;
         _customerService = customerService;
         _productService = productService;
+        _inventoryService = inventoryService;
+        _navigationIntent = navigationIntent;
     }
 
     public async Task InitializeAsync()
     {
+        _navigationIntent.TryTake(typeof(Views.Pages.SalesPage), out var search, out var createNew);
+        if (search is not null)
+        {
+            SearchTerm = search;
+        }
+
         await RefreshCustomersAsync();
         await LoadAsync();
+        _isInitialized = true;
+
+        // Arriving from the Dashboard's "Create Sale" button: open a new draft straight away.
+        if (createNew)
+        {
+            StartCreate();
+        }
     }
 
     private async Task RefreshCustomersAsync()
     {
         var customers = await _customerService.GetCustomersAsync(new CustomerQueryParameters { PageSize = 500 });
+        var selectedId = SelectedCustomerFilter?.Id ?? Guid.Empty;
 
         Customers.Clear();
+        CustomerFilterOptions.Clear();
+        CustomerFilterOptions.Add(AllCustomers);
         foreach (var customer in customers.Items)
         {
             Customers.Add(customer);
+            CustomerFilterOptions.Add(customer);
         }
+
+        SelectedCustomerFilter = CustomerFilterOptions.FirstOrDefault(c => c.Id == selectedId) ?? AllCustomers;
+    }
+
+    private async Task RefreshStatsAsync()
+    {
+        var all = (await _saleService.GetSalesAsync(new SaleQueryParameters { PageSize = int.MaxValue })).Items;
+        AllSaleCount = all.Count;
+        DraftSaleCount = all.Count(s => s.Status == SaleStatus.Draft);
+        InvoicedSaleCount = all.Count(s => s.Status == SaleStatus.Invoiced);
+        InvoicedSaleValue = all.Where(s => s.Status == SaleStatus.Invoiced).Sum(s => s.TotalAmount);
+    }
+
+    // Filters apply as soon as they change (the search box applies as you type).
+    partial void OnSelectedCustomerFilterChanged(CustomerSummary? value) => ReloadFromFirstPage();
+
+    partial void OnSelectedStatusFilterChanged(string value) => ReloadFromFirstPage();
+
+    partial void OnPageSizeChanged(int value) => ReloadFromFirstPage();
+
+    private void ReloadFromFirstPage()
+    {
+        if (!_isInitialized)
+        {
+            return;
+        }
+
+        PageNumber = 1;
+        _ = LoadAsync();
     }
 
     [RelayCommand]
@@ -141,7 +226,7 @@ public sealed partial class SalesViewModel : ViewModelBase
     private async Task ClearFiltersAsync()
     {
         SearchTerm = string.Empty;
-        SelectedCustomerFilter = null;
+        SelectedCustomerFilter = AllCustomers;
         SelectedStatusFilter = "All";
         PageNumber = 1;
         await LoadAsync();
@@ -186,7 +271,7 @@ public sealed partial class SalesViewModel : ViewModelBase
             var result = await _saleService.GetSalesAsync(new SaleQueryParameters
             {
                 SearchTerm = string.IsNullOrWhiteSpace(SearchTerm) ? null : SearchTerm,
-                CustomerId = SelectedCustomerFilter?.Id,
+                CustomerId = SelectedCustomerFilter is { } customer && customer.Id != Guid.Empty ? customer.Id : null,
                 Status = status,
                 PageNumber = PageNumber,
                 PageSize = PageSize,
@@ -205,6 +290,11 @@ public sealed partial class SalesViewModel : ViewModelBase
 
             TotalCount = result.TotalCount;
             TotalPages = Math.Max(1, result.TotalPages);
+
+            // Every save/invoice/cancel/delete ends with a reload, so the
+            // summary cards are refreshed here and never go stale.
+            await RefreshStatsAsync();
+            WeakReferenceMessenger.Default.Send(new StockDataChangedMessage());
         }
         finally
         {
@@ -227,9 +317,11 @@ public sealed partial class SalesViewModel : ViewModelBase
         FormNotes = string.Empty;
         ProductSearchText = string.Empty;
         ClearLineItems();
+        _savedFormSnapshot = BuildFormSnapshot();
         IsViewingDetail = true;
 
         RaiseModeChanged();
+        RaiseTotalsChanged();
     }
 
     [RelayCommand]
@@ -245,6 +337,12 @@ public sealed partial class SalesViewModel : ViewModelBase
             return;
         }
 
+        ShowDetail(detail);
+    }
+
+    /// <summary>Fills the form from the saved sale - what was on screen is replaced.</summary>
+    private void ShowDetail(SaleDetail detail)
+    {
         EditingSaleId = null;
         CurrentStatus = detail.Status;
         SaleNumberDisplay = detail.SaleNumber;
@@ -262,17 +360,40 @@ public sealed partial class SalesViewModel : ViewModelBase
         }
 
         EditingSaleId = detail.Id;
+        _savedFormSnapshot = BuildFormSnapshot();
         IsViewingDetail = true;
 
         RaiseModeChanged();
+        RaiseTotalsChanged();
     }
 
+    /// <summary>Back / Close. Asks first if leaving would lose edits.</summary>
     [RelayCommand]
-    private void CancelEdit()
+    private async Task CancelEditAsync()
+    {
+        if (IsViewingDetail && HasUnsavedChanges)
+        {
+            Dialog.Open(
+                "Discard your changes?",
+                "You have changes on this sale that have not been saved. Leaving now will lose them.",
+                "Discard Changes",
+                "Keep Editing",
+                isDanger: true,
+                CloseDetailAsync);
+            return;
+        }
+
+        await CloseDetailAsync();
+    }
+
+    private async Task CloseDetailAsync()
     {
         IsViewingDetail = false;
         ErrorMessage = null;
         OnPropertyChanged(nameof(IsShowingList));
+
+        // The list is always reloaded when returning to it.
+        await LoadAsync();
     }
 
     [RelayCommand]
@@ -329,83 +450,128 @@ public sealed partial class SalesViewModel : ViewModelBase
     [RelayCommand]
     private async Task SaveDraftAsync()
     {
-        if (IsBusy)
+        // The screen check matters for Ctrl+S, which also fires from the list.
+        if (IsBusy || Dialog.IsOpen || !IsViewingDetail || !CanEditFields)
         {
             return;
         }
 
+        IsBusy = true;
+        OnPropertyChanged(nameof(IsNotBusy));
+        try
+        {
+            if (await SaveFormAsync())
+            {
+                StatusMessage = "Draft saved.";
+                await LoadAsync();
+            }
+        }
+        finally
+        {
+            IsBusy = false;
+            OnPropertyChanged(nameof(IsNotBusy));
+        }
+    }
+
+    /// <summary>Validates and saves the form as a draft. Returns false (with ErrorMessage set) if it could not be saved.</summary>
+    private async Task<bool> SaveFormAsync()
+    {
         ErrorMessage = null;
 
         if (FormCustomer is null)
         {
             ErrorMessage = "A customer must be selected.";
-            return;
+            return false;
         }
 
         if (LineItems.Count == 0)
         {
             ErrorMessage = "Add at least one item before saving.";
-            return;
+            return false;
         }
 
-        IsBusy = true;
-        OnPropertyChanged(nameof(IsNotBusy));
-        try
+        var itemRequests = LineItems
+            .Select(i => new SaleItemRequest(i.ProductId, i.Quantity, i.UnitPrice, i.DiscountAmount))
+            .ToList();
+
+        var request = new SaveDraftSaleRequest(
+            EditingSaleId, FormCustomer.Id, new DateTimeOffset(FormSaleDate),
+            string.IsNullOrWhiteSpace(FormNotes) ? null : FormNotes, itemRequests);
+
+        var result = await _saleService.SaveDraftAsync(request);
+        if (result.IsFailure)
         {
-            var itemRequests = LineItems
-                .Select(i => new SaleItemRequest(i.ProductId, i.Quantity, i.UnitPrice, i.DiscountAmount))
-                .ToList();
-
-            var request = new SaveDraftSaleRequest(
-                EditingSaleId, FormCustomer.Id, new DateTimeOffset(FormSaleDate),
-                string.IsNullOrWhiteSpace(FormNotes) ? null : FormNotes, itemRequests);
-
-            var result = await _saleService.SaveDraftAsync(request);
-            if (result.IsFailure)
-            {
-                ErrorMessage = result.Error;
-                return;
-            }
-
-            EditingSaleId = result.Value.Id;
-            SaleNumberDisplay = result.Value.SaleNumber;
-            CurrentStatus = result.Value.Status;
-            StatusMessage = "Draft saved.";
-            RaiseModeChanged();
-
-            await LoadAsync();
+            ErrorMessage = result.Error;
+            return false;
         }
-        finally
-        {
-            IsBusy = false;
-            OnPropertyChanged(nameof(IsNotBusy));
-        }
+
+        EditingSaleId = result.Value.Id;
+        SaleNumberDisplay = result.Value.SaleNumber;
+        CurrentStatus = result.Value.Status;
+        _savedFormSnapshot = BuildFormSnapshot();
+        RaiseModeChanged();
+        return true;
     }
 
+    /// <summary>
+    /// Shows what invoicing will do to stock, from what is on screen. If there
+    /// isn't enough, the dialog says so and offers no way to proceed - the same
+    /// rule the service enforces, seen up front instead of after a click.
+    /// </summary>
     [RelayCommand]
     private async Task InvoiceAsync()
     {
-        if (IsBusy || EditingSaleId is not { } id)
+        if (IsBusy || EditingSaleId is null)
         {
             return;
         }
 
         ErrorMessage = null;
+        if (FormCustomer is null || LineItems.Count == 0)
+        {
+            ErrorMessage = FormCustomer is null ? "A customer must be selected." : "Add at least one item before invoicing.";
+            return;
+        }
+
+        var lines = await _inventoryService.PreviewStockChangesAsync(
+            LineItems.Select(i => new StockChange(i.ProductId, -i.Quantity)).ToList());
+        var canInvoice = lines.All(l => l.IsPossible);
+
+        Dialog.Open(
+            $"Create an invoice for {SaleNumberDisplay}?",
+            canInvoice
+                ? "These items will be issued from stock, as shown below. The sale can no longer be edited afterwards - it can only be cancelled, which returns the stock."
+                : "This sale can't be invoiced yet: there isn't enough stock for the products shown in red. Reduce the quantity or restock first.",
+            "Create Invoice",
+            canInvoice ? "Not Yet" : "Close",
+            isDanger: false,
+            InvoiceFormAsync,
+            canConfirm: canInvoice,
+            stockLines: lines);
+    }
+
+    /// <summary>Saves first, so what gets invoiced is what is on screen - invoicing the saved copy would silently ignore unsaved edits.</summary>
+    private async Task InvoiceFormAsync()
+    {
+        ErrorMessage = null;
         IsBusy = true;
         OnPropertyChanged(nameof(IsNotBusy));
         try
         {
-            var result = await _saleService.InvoiceAsync(id);
+            if (HasUnsavedChanges && !await SaveFormAsync())
+            {
+                return;
+            }
+
+            var result = await _saleService.InvoiceAsync(EditingSaleId!.Value);
             if (result.IsFailure)
             {
                 ErrorMessage = result.Error;
                 return;
             }
 
-            CurrentStatus = result.Value.Status;
-            InvoiceNumberDisplay = result.Value.InvoiceNumber;
+            ShowDetail(result.Value);
             StatusMessage = "Sale invoiced - stock issued.";
-            RaiseModeChanged();
             await LoadAsync();
         }
         finally
@@ -415,6 +581,7 @@ public sealed partial class SalesViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Shows what cancelling will do to stock before anything changes. Only the saved sale is cancelled, so unsaved edits are dropped.</summary>
     [RelayCommand]
     private async Task CancelSaleAsync()
     {
@@ -424,20 +591,53 @@ public sealed partial class SalesViewModel : ViewModelBase
         }
 
         ErrorMessage = null;
+
+        var sale = await _saleService.GetSaleByIdAsync(id);
+        if (sale is null)
+        {
+            ErrorMessage = "Sale not found - it may have just been removed.";
+            return;
+        }
+
+        var wasInvoiced = sale.Status == SaleStatus.Invoiced;
+        var lines = wasInvoiced
+            ? await _inventoryService.PreviewStockChangesAsync(sale.Items.Select(i => new StockChange(i.ProductId, i.Quantity)).ToList())
+            : Array.Empty<StockEffectLine>();
+
+        Dialog.Open(
+            $"Cancel {sale.SaleNumber}?",
+            wasInvoiced
+                ? "The items on this sale will be returned to stock, as shown below. This cannot be undone."
+                : "This draft has not issued any stock, so stock will not change. The sale is kept on record as Cancelled.",
+            "Cancel Sale",
+            "Keep Sale",
+            isDanger: true,
+            () => CancelConfirmedAsync(id),
+            warning: wasInvoiced
+                ? $"Cancelling will not refund the {sale.TotalAmount:N2} total - return any money received to the customer separately."
+                : null,
+            asksReason: true,
+            stockLines: lines);
+    }
+
+    private async Task CancelConfirmedAsync(Guid id)
+    {
+        var reason = Dialog.Reason;
+
+        ErrorMessage = null;
         IsBusy = true;
         OnPropertyChanged(nameof(IsNotBusy));
         try
         {
-            var result = await _saleService.CancelAsync(id);
+            var result = await _saleService.CancelAsync(id, reason);
             if (result.IsFailure)
             {
                 ErrorMessage = result.Error;
                 return;
             }
 
-            CurrentStatus = result.Value.Status;
+            ShowDetail(result.Value);
             StatusMessage = "Sale cancelled.";
-            RaiseModeChanged();
             await LoadAsync();
         }
         finally
@@ -448,13 +648,25 @@ public sealed partial class SalesViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private async Task DeleteDraftAsync()
+    private void DeleteDraft()
     {
         if (IsBusy || EditingSaleId is not { } id)
         {
             return;
         }
 
+        Dialog.Open(
+            $"Delete {SaleNumberDisplay}?",
+            "This draft will be removed from the list. Stock is not affected.",
+            "Delete Draft",
+            "Keep Draft",
+            isDanger: true,
+            () => DeleteConfirmedAsync(id));
+    }
+
+    private async Task DeleteConfirmedAsync(Guid id)
+    {
+        ErrorMessage = null;
         IsBusy = true;
         OnPropertyChanged(nameof(IsNotBusy));
         try
@@ -466,6 +678,7 @@ public sealed partial class SalesViewModel : ViewModelBase
                 return;
             }
 
+            StatusMessage = "Draft sale deleted.";
             IsViewingDetail = false;
             OnPropertyChanged(nameof(IsShowingList));
             await LoadAsync();

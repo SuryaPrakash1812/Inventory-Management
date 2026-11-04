@@ -3,9 +3,11 @@ using InventoryManagement.Application.Common.Interfaces;
 using InventoryManagement.Application.Inventory;
 using InventoryManagement.Application.StockAdjustments;
 using InventoryManagement.Core.Common;
+using InventoryManagement.Domain.Common;
 using InventoryManagement.Domain.Entities;
 using InventoryManagement.Domain.Enums;
 using InventoryManagement.Domain.StockAdjustments;
+using InventoryManagement.Infrastructure.Common;
 using InventoryManagement.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -102,6 +104,10 @@ public sealed class StockAdjustmentService : IStockAdjustmentService
             return Result.Failure<StockAdjustmentDetail>(validationError);
         }
 
+        // The old items are bulk-deleted below, straight against the database:
+        // without this, a failure in the final save would lose them.
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+
         StockAdjustment adjustment;
 
         if (request.StockAdjustmentId is { } existingId)
@@ -168,6 +174,7 @@ public sealed class StockAdjustmentService : IStockAdjustmentService
             $"Stock adjustment '{adjustment.AdjustmentNumber}' draft saved with {request.Items.Count} item(s).",
             cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return Result.Success(await ToDetailByIdAsync(adjustment.Id, cancellationToken));
     }
@@ -218,12 +225,30 @@ public sealed class StockAdjustmentService : IStockAdjustmentService
             return Result.Failure<StockAdjustmentDetail>(confirmGuard.Error!);
         }
 
-        foreach (var item in adjustment.Items)
+        // Each product's NET change across its lines is what must fit, so it
+        // is verified before anything is touched.
+        var products = await LoadProductStockAsync(adjustment, cancellationToken);
+        foreach (var group in adjustment.Items.GroupBy(i => i.ProductId))
         {
-            // Recompute against CURRENT stock, not the possibly-stale
-            // preview stored at draft time - see SaveDraftAsync's remarks.
-            var currentStock = await _inventoryService.GetCurrentStockAsync(item.ProductId, cancellationToken);
+            var (name, stock) = products[group.Key];
+            var stockGuard = StockAdjustmentWorkflow.EnsureChangeKeepsStockNonNegative(stock, group.Sum(i => i.QuantityChange), name);
+            if (stockGuard.IsFailure)
+            {
+                return Result.Failure<StockAdjustmentDetail>(stockGuard.Error!);
+            }
+        }
 
+        // All-or-nothing: every stock movement and the status change commit
+        // together. InventoryService joins this transaction, so a failure on
+        // a later line also undoes the earlier ones - otherwise the adjustment
+        // would still be Draft with part of it already applied, and confirming
+        // again would apply that part twice.
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+
+        // Increases first, so offsetting lines for one product (-10 and +10)
+        // never pass through a negative balance on the way to a valid total.
+        foreach (var item in adjustment.Items.OrderByDescending(i => i.QuantityChange))
+        {
             var adjustResult = await _inventoryService.AdjustStockAsync(new AdjustStockRequest(
                 item.ProductId,
                 item.QuantityChange,
@@ -233,12 +258,16 @@ public sealed class StockAdjustmentService : IStockAdjustmentService
 
             if (adjustResult.IsFailure)
             {
+                await transaction.RollbackAsync(cancellationToken);
+                _context.ChangeTracker.Clear();
                 return Result.Failure<StockAdjustmentDetail>(
-                    $"Failed to apply stock change for one of the items: {adjustResult.Error}");
+                    $"Failed to apply stock change for {products[item.ProductId].Name}: {adjustResult.Error}");
             }
 
-            item.QuantityBefore = currentStock;
-            item.QuantityAfter = currentStock + item.QuantityChange;
+            // The ACTUAL values at this moment, not the possibly-stale preview
+            // stored at draft time - see SaveDraftAsync's remarks.
+            item.QuantityAfter = adjustResult.Value.QuantityBalanceAfter;
+            item.QuantityBefore = item.QuantityAfter - item.QuantityChange;
         }
 
         adjustment.Status = StockAdjustmentStatus.Confirmed;
@@ -248,12 +277,13 @@ public sealed class StockAdjustmentService : IStockAdjustmentService
             $"Stock adjustment '{adjustment.AdjustmentNumber}' confirmed - stock updated for {adjustment.Items.Count} item(s).",
             cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return Result.Success(await ToDetailByIdAsync(adjustment.Id, cancellationToken));
     }
 
     public async Task<Result<StockAdjustmentDetail>> CancelAsync(
-        Guid stockAdjustmentId, CancellationToken cancellationToken = default)
+        Guid stockAdjustmentId, string? reason = null, CancellationToken cancellationToken = default)
     {
         _context.ChangeTracker.Clear();
 
@@ -275,28 +305,37 @@ public sealed class StockAdjustmentService : IStockAdjustmentService
         if (adjustment.Status == StockAdjustmentStatus.Confirmed)
         {
             // Reversing means applying the NEGATED original change. Before
-            // touching anything, verify every line can be safely reversed
+            // touching anything, verify each product can be safely reversed
             // without going negative - same safe pattern as
             // PurchaseWorkflow.EnsureSufficientStockToReverse, generalized
-            // for a signed change (an original increase needs enough stock
-            // to remove; an original decrease just adds back, which can
-            // never fail).
-            foreach (var item in adjustment.Items)
+            // for a signed change: a net increase needs enough stock to
+            // remove; a net decrease just adds back, which can never fail.
+            var products = await LoadProductStockAsync(adjustment, cancellationToken);
+            foreach (var group in adjustment.Items.GroupBy(i => i.ProductId))
             {
-                if (item.QuantityChange <= 0)
+                var netIncrease = group.Sum(i => i.QuantityChange);
+                if (netIncrease <= 0)
                 {
                     continue;
                 }
 
-                var currentStock = await _inventoryService.GetCurrentStockAsync(item.ProductId, cancellationToken);
-                var stockGuard = StockAdjustmentWorkflow.EnsureSufficientStockToReverse(currentStock, item.QuantityChange);
+                var (name, stock) = products[group.Key];
+                var stockGuard = StockAdjustmentWorkflow.EnsureSufficientStockToReverse(stock, netIncrease, name);
                 if (stockGuard.IsFailure)
                 {
                     return Result.Failure<StockAdjustmentDetail>(stockGuard.Error!);
                 }
             }
+        }
 
-            foreach (var item in adjustment.Items)
+        // All-or-nothing - see ConfirmAsync.
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+
+        if (adjustment.Status == StockAdjustmentStatus.Confirmed)
+        {
+            // Add-backs first (original decreases have the lowest change), so
+            // offsetting lines never pass through a negative balance.
+            foreach (var item in adjustment.Items.OrderBy(i => i.QuantityChange))
             {
                 var reverseResult = await _inventoryService.AdjustStockAsync(new AdjustStockRequest(
                     item.ProductId,
@@ -307,6 +346,8 @@ public sealed class StockAdjustmentService : IStockAdjustmentService
 
                 if (reverseResult.IsFailure)
                 {
+                    await transaction.RollbackAsync(cancellationToken);
+                    _context.ChangeTracker.Clear();
                     return Result.Failure<StockAdjustmentDetail>(
                         $"Failed to reverse stock for one of the items: {reverseResult.Error}");
                 }
@@ -315,12 +356,36 @@ public sealed class StockAdjustmentService : IStockAdjustmentService
 
         adjustment.Status = StockAdjustmentStatus.Cancelled;
 
+        var trimmedReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        if (trimmedReason is not null)
+        {
+            adjustment.Notes = CancellationNote.Append(adjustment.Notes, trimmedReason, _dateTimeProvider.UtcNow);
+        }
+
         await _auditLogger.LogAsync(
             AuditAction.Updated, nameof(StockAdjustment), adjustment.Id,
-            $"Stock adjustment '{adjustment.AdjustmentNumber}' cancelled.", cancellationToken);
+            trimmedReason is null
+                ? $"Stock adjustment '{adjustment.AdjustmentNumber}' cancelled."
+                : $"Stock adjustment '{adjustment.AdjustmentNumber}' cancelled: {trimmedReason}",
+            cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return Result.Success(await ToDetailByIdAsync(adjustment.Id, cancellationToken));
+    }
+
+    private async Task<Dictionary<Guid, (string Name, decimal Stock)>> LoadProductStockAsync(
+        StockAdjustment adjustment, CancellationToken cancellationToken)
+    {
+        var productIds = adjustment.Items.Select(i => i.ProductId).Distinct().ToList();
+        var products = await _context.Products
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(p => productIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.Name, p.QuantityOnHand })
+            .ToListAsync(cancellationToken);
+
+        return products.ToDictionary(p => p.Id, p => (p.Name, p.QuantityOnHand));
     }
 
     private IQueryable<StockAdjustment> BuildFilteredQuery(StockAdjustmentQueryParameters query)
@@ -329,8 +394,8 @@ public sealed class StockAdjustmentService : IStockAdjustmentService
 
         if (!string.IsNullOrWhiteSpace(query.SearchTerm))
         {
-            var term = query.SearchTerm.Trim();
-            adjustments = adjustments.Where(a => a.AdjustmentNumber.Contains(term));
+            var pattern = SearchPattern.Contains(query.SearchTerm.Trim());
+            adjustments = adjustments.Where(a => EF.Functions.Like(a.AdjustmentNumber, pattern, SearchPattern.Escape));
         }
 
         if (query.Reason is { } reason)

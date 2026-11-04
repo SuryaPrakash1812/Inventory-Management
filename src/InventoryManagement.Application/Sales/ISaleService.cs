@@ -28,7 +28,7 @@ public interface ISaleService
     /// stock via IInventoryService.AddStockAsync per line (SalesReturn
     /// movement) - this can never fail on a stock-sufficiency basis
     /// (adding stock back can't go negative), unlike Purchase's
-    /// equivalent reversal.
+    /// equivalent reversal. A reason, if given, is added to the sale's notes.
     /// </summary>
-    Task<Result<SaleDetail>> CancelAsync(Guid saleId, CancellationToken cancellationToken = default);
+    Task<Result<SaleDetail>> CancelAsync(Guid saleId, string? reason = null, CancellationToken cancellationToken = default);
 }

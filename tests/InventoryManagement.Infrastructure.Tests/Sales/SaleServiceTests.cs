@@ -72,6 +72,134 @@ public sealed class SaleServiceTests : IDisposable
         Assert.Equal(50m, stock);
     }
 
+    /// <summary>Regression: stock was checked line by line, so 30 + 30 passed against a stock of 50 and the first line was issued before the second failed.</summary>
+    [Fact]
+    public async Task InvoiceAsync_ChecksTotalAcrossLinesOfTheSameProduct_AndChangesNothingWhenShort()
+    {
+        var created = await _sut.SaveDraftAsync(MakeDraftRequest() with
+        {
+            Items = new[]
+            {
+                new SaleItemRequest(_product.Id, 30, 10, 0),
+                new SaleItemRequest(_product.Id, 30, 10, 0),
+            },
+        });
+
+        var result = await _sut.InvoiceAsync(created.Value.Id);
+
+        Assert.True(result.IsFailure);
+        Assert.Contains("only 50 available, but 60 requested for Cola", result.Error);
+        Assert.Equal(50m, await _inventoryService.GetCurrentStockAsync(_product.Id));
+        Assert.Empty(await _context.StockMovements.ToListAsync());
+    }
+
+    [Fact]
+    public async Task InvoiceAsync_WhenALineFails_RollsBackEveryLine()
+    {
+        var saleId = await CreateSaleWithLaterRemovedProductAsync(invoice: false);
+
+        var result = await _sut.InvoiceAsync(saleId);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(50m, await _inventoryService.GetCurrentStockAsync(_product.Id));
+        Assert.Empty(await _context.StockMovements.ToListAsync());
+        Assert.Equal(SaleStatus.Draft, (await _context.Sales.AsNoTracking().SingleAsync(s => s.Id == saleId)).Status);
+    }
+
+    [Fact]
+    public async Task CancelAsync_WhenALineFails_RollsBackEveryLine()
+    {
+        var saleId = await CreateSaleWithLaterRemovedProductAsync(invoice: true);
+        var movementsBefore = await _context.StockMovements.CountAsync();
+
+        var result = await _sut.CancelAsync(saleId);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(45m, await _inventoryService.GetCurrentStockAsync(_product.Id));
+        Assert.Equal(movementsBefore, await _context.StockMovements.CountAsync());
+        Assert.Equal(SaleStatus.Invoiced, (await _context.Sales.AsNoTracking().SingleAsync(s => s.Id == saleId)).Status);
+    }
+
+    /// <summary>A sale of 5 x Cola and 4 x a second product that is then soft-deleted, so that product's stock movement fails while Cola's succeeds.</summary>
+    private async Task<Guid> CreateSaleWithLaterRemovedProductAsync(bool invoice)
+    {
+        var other = new Product { Sku = "SKU-2", Name = "Lemonade", Category = _category, QuantityOnHand = 20m };
+        _context.Products.Add(other);
+        await _context.SaveChangesAsync();
+
+        var created = await _sut.SaveDraftAsync(MakeDraftRequest() with
+        {
+            Items = new[]
+            {
+                new SaleItemRequest(_product.Id, 5, 10, 0),
+                new SaleItemRequest(other.Id, 4, 10, 0),
+            },
+        });
+
+        if (invoice)
+        {
+            await _sut.InvoiceAsync(created.Value.Id);
+        }
+
+        var tracked = await _context.Products.SingleAsync(p => p.Id == other.Id);
+        tracked.MarkDeleted(DateTimeOffset.UtcNow, null);
+        await _context.SaveChangesAsync();
+
+        return created.Value.Id;
+    }
+
+    [Fact]
+    public async Task CancelAsync_WithReason_AddsItToTheNotes()
+    {
+        var created = await _sut.SaveDraftAsync(MakeDraftRequest() with { Notes = "Original note" });
+
+        var cancelled = await _sut.CancelAsync(created.Value.Id, "  Customer changed their mind  ");
+
+        Assert.True(cancelled.IsSuccess);
+        Assert.Contains("Original note", cancelled.Value.Notes);
+        Assert.Contains(": Customer changed their mind", cancelled.Value.Notes);
+    }
+
+    [Fact]
+    public async Task CancelAsync_WithoutReason_LeavesNotesAlone()
+    {
+        var created = await _sut.SaveDraftAsync(MakeDraftRequest() with { Notes = "Original note" });
+
+        var cancelled = await _sut.CancelAsync(created.Value.Id, "   ");
+
+        Assert.Equal("Original note", cancelled.Value.Notes);
+    }
+
+    [Fact]
+    public async Task PreviewStockChangesAsync_TotalsEachProduct_AndChangesNothing()
+    {
+        var lines = await _inventoryService.PreviewStockChangesAsync(new[]
+        {
+            new StockChange(_product.Id, -30m),
+            new StockChange(_product.Id, -30m),
+        });
+
+        var line = Assert.Single(lines);
+        Assert.Equal("Cola", line.ProductName);
+        Assert.Equal(50m, line.CurrentStock);
+        Assert.Equal(-60m, line.Change);
+        Assert.Equal(-10m, line.StockAfter);
+        Assert.False(line.IsPossible);
+        Assert.Equal(50m, await _inventoryService.GetCurrentStockAsync(_product.Id));
+        Assert.Empty(await _context.StockMovements.ToListAsync());
+    }
+
+    [Fact]
+    public async Task SaveDraftAsync_DiscountAboveLineAmount_Fails()
+    {
+        var result = await _sut.SaveDraftAsync(MakeDraftRequest() with
+        {
+            Items = new[] { new SaleItemRequest(_product.Id, 2, 5, DiscountAmount: 11) },
+        });
+
+        Assert.True(result.IsFailure);
+    }
+
     [Fact]
     public async Task SaveDraftAsync_ComputesLineTotalsWithoutTax()
     {
@@ -265,6 +393,7 @@ public sealed class SaleServiceTests : IDisposable
     public void Dispose()
     {
         _context.Dispose();
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         if (File.Exists(_databaseFilePath))
         {
             File.Delete(_databaseFilePath);

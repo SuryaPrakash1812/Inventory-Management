@@ -9,8 +9,18 @@ namespace InventoryManagement.App.ViewModels.Customers;
 public sealed partial class CustomersViewModel : ViewModelBase
 {
     private readonly ICustomerService _customerService;
+    private bool _isInitialized;
 
-    private const int PageSize = 25;
+    [ObservableProperty]
+    private int _pageSize = 10;
+
+    // --- Summary cards (all customers, regardless of filters) ---
+
+    [ObservableProperty] private int _allCustomerCount;
+    [ObservableProperty] private int _activeCustomerCount;
+    [ObservableProperty] private int _inactiveCustomerCount;
+    [ObservableProperty] private int _missingContactCount;
+    [ObservableProperty] private string _activePercent = "0%";
 
     public ObservableCollection<CustomerSummary> Customers { get; } = new();
 
@@ -95,7 +105,40 @@ public sealed partial class CustomersViewModel : ViewModelBase
         _customerService = customerService;
     }
 
-    public async Task InitializeAsync() => await LoadAsync();
+    public async Task InitializeAsync()
+    {
+        await LoadAsync();
+        await RefreshStatsAsync();
+        _isInitialized = true;
+    }
+
+    private async Task RefreshStatsAsync()
+    {
+        var all = (await _customerService.GetCustomersAsync(new CustomerQueryParameters { PageSize = int.MaxValue })).Items;
+        AllCustomerCount = all.Count;
+        ActiveCustomerCount = all.Count(c => c.IsActive);
+        InactiveCustomerCount = all.Count - ActiveCustomerCount;
+        MissingContactCount = all.Count(c => string.IsNullOrWhiteSpace(c.Phone) && string.IsNullOrWhiteSpace(c.Email));
+        ActivePercent = all.Count == 0 ? "0%" : $"{100.0 * ActiveCustomerCount / all.Count:0}%";
+    }
+
+    // Filters apply as soon as they change (the search box applies as you type).
+    partial void OnSelectedActiveFilterChanged(string value) => ReloadFromFirstPage();
+
+    partial void OnSortDescendingChanged(bool value) => ReloadFromFirstPage();
+
+    partial void OnPageSizeChanged(int value) => ReloadFromFirstPage();
+
+    private void ReloadFromFirstPage()
+    {
+        if (!_isInitialized)
+        {
+            return;
+        }
+
+        PageNumber = 1;
+        _ = LoadAsync();
+    }
 
     [RelayCommand]
     private async Task SearchAsync()
@@ -223,11 +266,15 @@ public sealed partial class CustomersViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void CancelEdit()
+    private async Task CancelEditAsync()
     {
         IsEditing = false;
         ErrorMessage = null;
         OnPropertyChanged(nameof(IsShowingList));
+
+        // The list is always reloaded when returning to it.
+        await LoadAsync();
+        await RefreshStatsAsync();
     }
 
     [RelayCommand]
@@ -270,6 +317,7 @@ public sealed partial class CustomersViewModel : ViewModelBase
             IsEditing = false;
             OnPropertyChanged(nameof(IsShowingList));
             await LoadAsync();
+            await RefreshStatsAsync();
         }
         finally
         {
@@ -290,6 +338,7 @@ public sealed partial class CustomersViewModel : ViewModelBase
         }
 
         await LoadAsync();
+        await RefreshStatsAsync();
     }
 
     [RelayCommand]
@@ -311,9 +360,12 @@ public sealed partial class CustomersViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void CloseHistory()
+    private async Task CloseHistoryAsync()
     {
         IsViewingHistory = false;
         OnPropertyChanged(nameof(IsShowingList));
+
+        await LoadAsync();
+        await RefreshStatsAsync();
     }
 }

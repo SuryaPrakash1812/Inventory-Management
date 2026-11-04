@@ -21,6 +21,14 @@ public interface IInventoryService
 {
     Task<decimal> GetCurrentStockAsync(Guid productId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// What the given changes would do to stock, changing nothing: one entry
+    /// per product, with its changes added together. Lets a screen show the
+    /// effect of a document's lines - saved or still being edited - up front.
+    /// </summary>
+    Task<IReadOnlyList<StockEffectLine>> PreviewStockChangesAsync(
+        IReadOnlyCollection<StockChange> changes, CancellationToken cancellationToken = default);
+
     Task<Result<StockMovementResult>> AddStockAsync(
         AddStockRequest request, CancellationToken cancellationToken = default);
 

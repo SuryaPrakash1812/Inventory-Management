@@ -3,78 +3,315 @@
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  Title="{Binding WindowTitle}"
-                 Height="760"
-                 Width="1240"
-                 MinHeight="560"
-                 MinWidth="860"
+                 Height="900"
+                 Width="1440"
+                 MinHeight="600"
+                 MinWidth="1024"
                  WindowStartupLocation="CenterScreen"
                  WindowState="Maximized"
                  ExtendsContentIntoTitleBar="True"
-                 WindowBackdropType="Mica"
-                 WindowCornerPreference="Round">
+                 WindowBackdropType="None"
+                 WindowCornerPreference="Round"
+                 Background="{StaticResource AppBackgroundBrush}">
 
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <!-- Title bar -->
             <RowDefinition Height="*" />
-            <!-- Navigation + content -->
             <RowDefinition Height="Auto" />
-            <!-- Status bar -->
         </Grid.RowDefinitions>
 
-        <ui:TitleBar Grid.Row="0" Title="{Binding WindowTitle}" />
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="292" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
 
-        <ui:NavigationView x:Name="RootNavigation"
-                           Grid.Row="1"
-                           MenuItemsSource="{Binding MenuItems}"
-                           FooterMenuItemsSource="{Binding FooterMenuItems}">
-            <ui:NavigationView.Header>
-                <Grid Margin="24,20,24,8">
+            <!-- ============ Sidebar ============ -->
+            <Border Grid.Column="0" Background="{StaticResource AppSurfaceBrush}"
+                    BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="0,0,1,0">
+                <DockPanel>
+                    <!-- Brand -->
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="24,24,16,28">
+                        <Border Width="50" Height="50" CornerRadius="12">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#3B82F6" Offset="0" />
+                                    <GradientStop Color="#1D4ED8" Offset="1" />
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <ui:SymbolIcon Symbol="Box24" Filled="True" FontSize="28" Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="Inventory Management" FontSize="17" FontWeight="Bold"
+                                       Foreground="{StaticResource AppTextPrimaryBrush}" />
+                            <TextBlock Text="Manage Stock • Track • Grow" FontSize="12.5" Margin="0,3,0,0"
+                                       Foreground="{StaticResource AppTextSecondaryBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Footer: Settings -->
+                    <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,16">
+                        <Border Height="1" Background="{StaticResource AppDividerBrush}" Margin="24,0,24,10" />
+                        <ListBox x:Name="FooterNavList"
+                                 ItemsSource="{Binding FooterMenuItems}"
+                                 ItemContainerStyle="{StaticResource SidebarItem}"
+                                 Background="Transparent" BorderThickness="0" Padding="0"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 SelectionChanged="OnNavSelectionChanged"
+                                 PreviewMouseLeftButtonDown="OnNavItemMouseDown">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <ui:SymbolIcon Symbol="{Binding Icon}" FontSize="22"
+                                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
+                                        <TextBlock Text="{Binding Title}" FontSize="15" Margin="16,0,0,0" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </StackPanel>
+
+                    <!-- Main menu -->
+                    <ListBox x:Name="MainNavList"
+                             ItemsSource="{Binding MenuItems}"
+                             ItemContainerStyle="{StaticResource SidebarItem}"
+                             Background="Transparent" BorderThickness="0" Padding="0"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             SelectionChanged="OnNavSelectionChanged"
+                                 PreviewMouseLeftButtonDown="OnNavItemMouseDown">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <ui:SymbolIcon Symbol="{Binding Icon}" FontSize="22"
+                                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
+                                    <TextBlock Text="{Binding Title}" FontSize="15" Margin="16,0,0,0" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <!-- ============ Main area ============ -->
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Window caption buttons (min / max / close) and drag area -->
+                <ui:TitleBar Grid.Row="0" Title="" Height="34" />
+
+                <!-- Top bar: search, notifications, user -->
+                <Grid Grid.Row="1" Margin="32,0,28,12">
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <ui:TextBlock Grid.Column="0"
-                                  Text="{Binding CurrentPageTitle}"
-                                  FontTypography="Title"
-                                  VerticalAlignment="Center" />
+                    <!-- Global search -->
+                    <Border x:Name="SearchBorder" Grid.Column="0" Width="470" Height="46" CornerRadius="10"
+                            Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1"
+                            Effect="{StaticResource CardShadow}">
+                        <Grid Margin="16,0,10,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ui:SymbolIcon Grid.Column="0" Symbol="Search24" FontSize="20" Foreground="{StaticResource AppTextSecondaryBrush}" />
+                            <TextBlock Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"
+                                       Text="Search products, suppliers, purchases..." FontSize="14"
+                                       Foreground="{StaticResource AppTextMutedBrush}"
+                                       Visibility="{Binding Text, ElementName=SearchBox, Converter={StaticResource EmptyStringToVisibility}}" />
+                            <TextBox x:Name="SearchBox" Grid.Column="1" Margin="12,0,8,0" Style="{StaticResource BareTextBox}"
+                                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                     PreviewKeyDown="OnSearchBoxPreviewKeyDown" />
+                            <Border Grid.Column="2" CornerRadius="6" Padding="8,3" VerticalAlignment="Center"
+                                    Background="{StaticResource AppHoverBrush}" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="1">
+                                <TextBlock Text="Ctrl + K" FontSize="12" Foreground="{StaticResource AppTextSecondaryBrush}" />
+                            </Border>
+                        </Grid>
+                    </Border>
 
-                    <StackPanel Grid.Column="1"
-                                Orientation="Horizontal"
-                                VerticalAlignment="Center">
-                        <ui:Button Content="Toggle theme"
-                                   Command="{Binding ToggleThemeCommand}"
-                                   IsEnabled="False"
-                                   Margin="0,0,16,0" />
+                    <Popup Grid.Column="0" PlacementTarget="{Binding ElementName=SearchBorder}" Placement="Bottom" VerticalOffset="6"
+                           IsOpen="{Binding IsSearchOpen, Mode=TwoWay}" StaysOpen="False" AllowsTransparency="True"
+                           Width="{Binding ActualWidth, ElementName=SearchBorder}">
+                        <Border Style="{StaticResource Card}" Padding="6" Margin="0,0,0,12">
+                            <StackPanel>
+                                <Grid Margin="12,2,2,4">
+                                    <TextBlock Text="Search results" FontSize="12.5" VerticalAlignment="Center" Foreground="{StaticResource AppTextSecondaryBrush}" />
+                                    <Button Style="{StaticResource OutlineIconButton}" Width="30" Height="30" HorizontalAlignment="Right"
+                                            ToolTip="Close" Command="{Binding CloseSearchCommand}">
+                                        <ui:SymbolIcon Symbol="Dismiss24" FontSize="14" />
+                                    </Button>
+                                </Grid>
+                                <ListBox x:Name="SearchResultsList" ItemsSource="{Binding SearchResults}"
+                                         SelectedItem="{Binding SelectedSearchResult}"
+                                         ItemContainerStyle="{StaticResource SearchResultItem}"
+                                         Background="Transparent" BorderThickness="0" MaxHeight="420"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         PreviewMouseLeftButtonUp="OnSearchResultClicked">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border Width="34" Height="34" CornerRadius="8" Background="{StaticResource AppPrimarySoftBrush}">
+                                                    <ui:SymbolIcon Symbol="{Binding Icon}" FontSize="18" Foreground="{StaticResource AppPrimaryBrush}"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Border>
+                                                <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="SemiBold"
+                                                               Foreground="{StaticResource AppTextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Subtitle}" FontSize="12.5"
+                                                               Foreground="{StaticResource AppTextSecondaryBrush}" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="2" Text="{Binding Group}" FontSize="12" VerticalAlignment="Center"
+                                                           Foreground="{StaticResource AppTextMutedBrush}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                                <TextBlock Text="No matching products, suppliers or purchases." Margin="12,10" FontSize="13"
+                                           Foreground="{StaticResource AppTextSecondaryBrush}"
+                                           Visibility="{Binding HasNoSearchResults, Converter={StaticResource BoolToVisibility}}" />
+                            </StackPanel>
+                        </Border>
+                    </Popup>
 
-                        <ui:TextBlock Text="{Binding UserDisplayName}"
-                                      FontTypography="Body"
-                                      VerticalAlignment="Center" />
-                    </StackPanel>
+                    <!-- Notifications -->
+                    <ToggleButton x:Name="BellButton" Grid.Column="2" Width="44" Height="44" Margin="0,0,16,0" Cursor="Hand"
+                                  ToolTip="Notifications"
+                                  IsChecked="{Binding IsNotificationsOpen, Mode=TwoWay}"
+                                  IsHitTestVisible="{Binding IsOpen, ElementName=NotificationsPopup, Converter={StaticResource InverseBool}}">
+                        <ToggleButton.Template>
+                            <ControlTemplate TargetType="ToggleButton">
+                                <Border x:Name="Chrome" Background="Transparent" CornerRadius="22">
+                                    <Grid Width="26" Height="26">
+                                        <ui:SymbolIcon Symbol="Alert24" FontSize="24" Foreground="{StaticResource AppTextSecondaryBrush}" />
+                                        <Ellipse Width="9" Height="9" Fill="{StaticResource AppDangerBrush}" Stroke="White" StrokeThickness="1.5"
+                                                 HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                 Visibility="{Binding HasStockAlerts, Converter={StaticResource BoolToVisibility}}" />
+                                    </Grid>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AppHoverBrush}" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </ToggleButton.Template>
+                    </ToggleButton>
+
+                    <Popup x:Name="NotificationsPopup" PlacementTarget="{Binding ElementName=BellButton}" Placement="Bottom"
+                           HorizontalOffset="-300" VerticalOffset="8"
+                           IsOpen="{Binding IsNotificationsOpen, Mode=TwoWay}" StaysOpen="False" AllowsTransparency="True">
+                        <Border Style="{StaticResource Card}" Width="360" Padding="0" Margin="0,0,12,12">
+                            <StackPanel>
+                                <Grid Margin="18,12,12,8">
+                                    <TextBlock Text="Notifications" Style="{StaticResource CardTitle}" VerticalAlignment="Center" />
+                                    <Button Style="{StaticResource OutlineIconButton}" Width="30" Height="30" HorizontalAlignment="Right"
+                                            ToolTip="Close" Command="{Binding CloseNotificationsCommand}">
+                                        <ui:SymbolIcon Symbol="Dismiss24" FontSize="14" />
+                                    </Button>
+                                </Grid>
+                                <TextBlock Text="You're all caught up - every product is above its minimum stock."
+                                           Style="{StaticResource SecondaryText}" TextWrapping="Wrap" Margin="18,4,18,18"
+                                           Visibility="{Binding HasStockAlerts, Converter={StaticResource InverseBoolToVisibility}}" />
+                                <ItemsControl ItemsSource="{Binding StockAlerts}" MaxHeight="320">
+                                    <ItemsControl.Template>
+                                        <ControlTemplate TargetType="ItemsControl">
+                                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                <ItemsPresenter />
+                                            </ScrollViewer>
+                                        </ControlTemplate>
+                                    </ItemsControl.Template>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="18,8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border Width="32" Height="32" CornerRadius="8" Background="{StaticResource KpiOrangeSoftBrush}">
+                                                    <ui:SymbolIcon Symbol="Warning24" FontSize="17" Foreground="{StaticResource KpiOrangeBrush}"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Border>
+                                                <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"
+                                                               Foreground="{StaticResource AppTextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding Detail}" Style="{StaticResource SecondaryText}" FontSize="12.5" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Border Height="1" Background="{StaticResource AppDividerBrush}" Margin="0,8,0,0" />
+                                <Button Content="View inventory" Style="{StaticResource LinkButton}" HorizontalAlignment="Center"
+                                        Margin="0,10,0,12" Command="{Binding ViewInventoryCommand}" />
+                            </StackPanel>
+                        </Border>
+                    </Popup>
+
+                    <!-- User menu -->
+                    <Button x:Name="UserMenuButton" Grid.Column="3" Style="{StaticResource FlatButton}" Click="OnUserMenuClick">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="40" Height="40" CornerRadius="20" Background="#A5B4FC">
+                                <TextBlock Text="{Binding UserDisplayName, Converter={StaticResource Initials}}" FontSize="16" FontWeight="SemiBold"
+                                           Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <TextBlock Text="{Binding UserDisplayName}" FontSize="15" FontWeight="Medium" Margin="12,0,0,0" VerticalAlignment="Center"
+                                       Foreground="{StaticResource AppTextPrimaryBrush}" />
+                            <ui:SymbolIcon Symbol="ChevronDown20" FontSize="16" Margin="18,0,4,0" Foreground="{StaticResource AppTextSecondaryBrush}" />
+                        </StackPanel>
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem IsEnabled="False" Header="{Binding UserDisplayName}" />
+                                <MenuItem IsEnabled="False" Header="{Binding UserRoleName}" FontSize="12" />
+                                <Separator />
+                                <MenuItem Header="Settings" Command="{Binding OpenSettingsCommand}"
+                                          Visibility="{Binding CanOpenSettings, Converter={StaticResource BoolToVisibility}}">
+                                    <MenuItem.Icon>
+                                        <ui:SymbolIcon Symbol="Settings24" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="Sign out" Command="{Binding LogoutCommand}">
+                                    <MenuItem.Icon>
+                                        <ui:SymbolIcon Symbol="SignOut24" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
                 </Grid>
-            </ui:NavigationView.Header>
-        </ui:NavigationView>
 
-        <StackPanel Grid.Row="2">
-            <Separator />
-            <Grid Margin="16,8">
+                <Frame x:Name="ContentFrame" Grid.Row="3" NavigationUIVisibility="Hidden" Focusable="False" Margin="12,0,12,0" />
+            </Grid>
+        </Grid>
+
+        <!-- ============ Status bar ============ -->
+        <Border Grid.Row="1" Background="{StaticResource AppSurfaceBrush}" BorderBrush="{StaticResource AppBorderBrush}" BorderThickness="0,1,0,0">
+            <Grid Margin="22,7">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-
-                <ui:TextBlock Grid.Column="0"
-                              Text="{Binding StatusMessage}"
-                              FontTypography="Caption"
-                              Opacity="0.7" />
-
-                <ui:TextBlock Grid.Column="1"
-                              Text="v0.1.0"
-                              FontTypography="Caption"
-                              Opacity="0.5" />
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse Width="9" Height="9" Fill="{StaticResource AppSuccessBrush}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding StatusMessage}" FontSize="13" Margin="10,0,0,0" Foreground="{StaticResource AppTextSecondaryBrush}" />
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="{Binding AppVersion}" FontSize="13" Foreground="{StaticResource AppTextMutedBrush}" />
             </Grid>
-        </StackPanel>
+        </Border>
     </Grid>
 </ui:FluentWindow>

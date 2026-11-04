@@ -25,4 +25,15 @@ public partial class DashboardPage : Page
         DashboardScrollViewer.ScrollToVerticalOffset(DashboardScrollViewer.VerticalOffset - e.Delta);
         e.Handled = true;
     }
+
+    private void OnDateRangeClick(object sender, System.Windows.RoutedEventArgs e)
+    {
+        if (DateRangeButton.ContextMenu is { } menu)
+        {
+            menu.DataContext = _viewModel;
+            menu.PlacementTarget = DateRangeButton;
+            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            menu.IsOpen = true;
+        }
+    }
 }

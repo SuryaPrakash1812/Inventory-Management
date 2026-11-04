@@ -205,6 +205,7 @@ public sealed class UserRoleManagementServiceTests : IDisposable
     public void Dispose()
     {
         _context.Dispose();
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         if (File.Exists(_databaseFilePath))
         {
             File.Delete(_databaseFilePath);

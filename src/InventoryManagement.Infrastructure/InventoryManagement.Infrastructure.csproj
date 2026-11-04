@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -8,7 +8,10 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.8" />
+    <!-- Sqlite.Core + the SQLCipher native bundle (instead of Microsoft.EntityFrameworkCore.Sqlite, which bundles plain SQLite) so the local database and backups are encrypted - see Security\DatabaseKeyProvider.cs. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite.Core" Version="8.0.8" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlcipher" Version="2.1.10" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.8">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -26,6 +29,10 @@
     <ProjectReference Include="..\InventoryManagement.Application\InventoryManagement.Application.csproj" />
     <!-- For serializing Outbox payloads (e.g. CreatePurchaseContract) - see PurchaseService's Outbox-writing remarks. -->
     <ProjectReference Include="..\InventoryManagement.Contracts\InventoryManagement.Contracts.csproj" />
+    <!-- License verification (startup gate) and the per-customer backup encryption key. -->
+    <ProjectReference Include="..\InventoryManagement.Licensing\InventoryManagement.Licensing.csproj" />
   </ItemGroup>
 
 </Project>
+
+

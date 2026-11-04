@@ -1,5 +1,4 @@
 using InventoryManagement.Application.Common.Interfaces;
-using InventoryManagement.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -11,25 +10,26 @@ namespace InventoryManagement.Infrastructure.Data;
 /// Permissions) is applied as part of migrations themselves (via HasData),
 /// not here - that keeps it versioned alongside the schema it belongs to.
 ///
-/// NOTE: until an initial migration exists (see Infrastructure/README or the
-/// project's setup notes for the exact `dotnet ef migrations add` command),
-/// MigrateAsync has nothing to apply and the database will contain no
-/// application tables yet - only EF's own migrations-history table.
+/// By the time this runs, LocalDatabaseBootstrapper has already ensured the
+/// file (if any) is encrypted with this PC's key, so a brand-new database
+/// created by MigrateAsync here is encrypted from its very first page.
 /// </summary>
 public sealed class DatabaseInitializer : IDatabaseInitializer
 {
     private readonly InventoryDbContext _context;
+    private readonly LocalDatabaseOptions _database;
     private readonly ILogger<DatabaseInitializer> _logger;
 
-    public DatabaseInitializer(InventoryDbContext context, ILogger<DatabaseInitializer> logger)
+    public DatabaseInitializer(InventoryDbContext context, LocalDatabaseOptions database, ILogger<DatabaseInitializer> logger)
     {
         _context = context;
+        _database = database;
         _logger = logger;
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        Directory.CreateDirectory(AppPaths.AppDataRoot);
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(_database.DatabasePath))!);
 
         var pendingMigrations = (await _context.Database
             .GetPendingMigrationsAsync(cancellationToken)).ToList();
@@ -47,9 +47,9 @@ public sealed class DatabaseInitializer : IDatabaseInitializer
         if (!await _context.Database.CanConnectAsync(cancellationToken))
         {
             throw new InvalidOperationException(
-                $"Database migration completed but the database at '{AppPaths.DatabaseFilePath}' is not reachable.");
+                $"Database migration completed but the database at '{_database.DatabasePath}' is not reachable.");
         }
 
-        _logger.LogInformation("Database ready at {Path}", AppPaths.DatabaseFilePath);
+        _logger.LogInformation("Database ready at {Path}", _database.DatabasePath);
     }
 }

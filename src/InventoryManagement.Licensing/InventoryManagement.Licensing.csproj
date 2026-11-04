@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>InventoryManagement.Licensing</RootNamespace>
+  </PropertyGroup>
+
+  <!--
+    No package or project references on purpose: this assembly is shared by
+    the WPF app (which only ever VERIFIES licenses, with the embedded public
+    key) and by tools\InventoryManagement.LicenseGenerator (which ISSUES them,
+    with the vendor's private key). Everything it needs is in the BCL.
+  -->
+
+</Project>

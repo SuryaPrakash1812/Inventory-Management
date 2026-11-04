@@ -17,23 +17,16 @@ public partial class SuppliersPage : Page
 
         Loaded += async (_, _) => await viewModel.InitializeAsync();
 
-        // Only List and Edit modes have a wrapping ScrollViewer that needs
-        // this fallback. History mode's ListView already scrolls natively
-        // via mouse wheel on its own (standard WPF behavior) - if we forced
-        // routing here regardless of mode, History would incorrectly try to
-        // scroll the hidden ListScrollViewer instead of doing nothing and
-        // letting the ListView handle it itself.
+        // See ProductsPage: drives whichever view's ScrollViewer is visible
+        // directly from the mouse wheel.
         PreviewMouseWheel += OnPreviewMouseWheel;
     }
 
     private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        if (_viewModel.IsViewingHistory)
-        {
-            return;
-        }
-
-        var scrollViewer = _viewModel.IsEditing ? EditScrollViewer : ListScrollViewer;
+        var scrollViewer = _viewModel.IsViewingHistory ? HistoryScrollViewer
+            : _viewModel.IsEditing ? EditScrollViewer
+            : ListScrollViewer;
         scrollViewer.ScrollToVerticalOffset(scrollViewer.VerticalOffset - e.Delta);
         e.Handled = true;
     }

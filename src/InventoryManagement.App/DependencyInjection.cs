@@ -1,3 +1,4 @@
+using InventoryManagement.App.Services;
 using InventoryManagement.App.ViewModels;
 using InventoryManagement.App.ViewModels.Auth;
 using InventoryManagement.App.ViewModels.Backup;
@@ -33,6 +34,9 @@ public static class DependencyInjection
         // Lets WPF-UI's NavigationView resolve pages through this DI container
         // instead of calling "new PageType()" itself.
         services.AddNavigationViewPageProvider();
+
+        // Hands "search for X" / "open a new form" from the shell to the page being opened.
+        services.AddSingleton<NavigationIntent>();
 
         services.AddTransient<LoginWindow>();
         services.AddTransient<LoginViewModel>();

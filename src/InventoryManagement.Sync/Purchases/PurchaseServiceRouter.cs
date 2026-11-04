@@ -94,8 +94,13 @@ public sealed class PurchaseServiceRouter : IPurchaseService
     public Task<Result<PurchaseDetail>> ConfirmPurchaseAsync(Guid purchaseId, CancellationToken cancellationToken = default) =>
         _local.ConfirmPurchaseAsync(purchaseId, cancellationToken);
 
-    public Task<Result<PurchaseDetail>> CancelPurchaseAsync(Guid purchaseId, CancellationToken cancellationToken = default) =>
-        _local.CancelPurchaseAsync(purchaseId, cancellationToken);
+    public Task<Result<PurchaseDetail>> CancelPurchaseAsync(
+        Guid purchaseId, string? reason = null, CancellationToken cancellationToken = default) =>
+        _local.CancelPurchaseAsync(purchaseId, reason, cancellationToken);
+
+    public Task<Result<PurchaseCancellationPreview>> PreviewCancellationAsync(
+        Guid purchaseId, CancellationToken cancellationToken = default) =>
+        _local.PreviewCancellationAsync(purchaseId, cancellationToken);
 
     public Task<Result<PurchaseDetail>> SetPaymentStatusAsync(
         Guid purchaseId, PurchasePaymentStatus paymentStatus, CancellationToken cancellationToken = default) =>

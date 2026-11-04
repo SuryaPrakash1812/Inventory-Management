@@ -113,6 +113,23 @@ public class ProductServiceTests : IDisposable
         Assert.Single(byName.Items);
     }
 
+    /// <summary>Regression: search used string.Contains, which SQLite evaluates case-sensitively.</summary>
+    [Fact]
+    public async Task GetProductsAsync_SearchIgnoresCase_AndTreatsWildcardsLiterally()
+    {
+        await _sut.CreateProductAsync(MakeRequest("RS-001", "Radha Steel"));
+        await _sut.CreateProductAsync(MakeRequest("PCT-50", "50% Off Bin"));
+        await _sut.CreateProductAsync(MakeRequest("PCT-5X", "5X Bin"));
+
+        var lower = await _sut.GetProductsAsync(new ProductQueryParameters { SearchTerm = "radha" });
+        var upper = await _sut.GetProductsAsync(new ProductQueryParameters { SearchTerm = "STEEL" });
+        var percent = await _sut.GetProductsAsync(new ProductQueryParameters { SearchTerm = "50%" });
+
+        Assert.Equal("RS-001", Assert.Single(lower.Items).Sku);
+        Assert.Equal("RS-001", Assert.Single(upper.Items).Sku);
+        Assert.Equal("PCT-50", Assert.Single(percent.Items).Sku);
+    }
+
     [Fact]
     public async Task GetProductsAsync_Pagination_ReturnsCorrectPageAndTotalCount()
     {

@@ -16,4 +16,10 @@ public static class AppPaths
     public static string BackupsFolder { get; } = Path.Combine(AppDataRoot, "Backups");
 
     public static string DatabaseFilePath { get; } = Path.Combine(AppDataRoot, "inventory.db");
+
+    /// <summary>The DPAPI-protected database encryption key - see DatabaseKeyProvider.</summary>
+    public static string DatabaseKeyFilePath { get; } = Path.Combine(AppDataRoot, "inventory.key");
+
+    /// <summary>The customer's signed, machine-bound license - see LicenseStore.</summary>
+    public static string LicenseFilePath { get; } = Path.Combine(AppDataRoot, "license.lic");
 }

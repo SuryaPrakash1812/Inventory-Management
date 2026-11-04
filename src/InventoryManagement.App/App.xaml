@@ -8,11 +8,21 @@
             <ResourceDictionary.MergedDictionaries>
                 <ui:ThemesDictionary Theme="Light" />
                 <ui:ControlsDictionary />
+                <ResourceDictionary Source="Styles/AppTheme.xaml" />
+                <!-- Converters before Components.xaml, whose templates use them -->
+                <ResourceDictionary>
+                    <converters:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+                    <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
+                    <converters:InverseBoolConverter x:Key="InverseBool" />
+                    <converters:StringToVisibilityConverter x:Key="StringToVisibility" />
+                    <converters:EmptyStringToVisibilityConverter x:Key="EmptyStringToVisibility" />
+                    <converters:StatusPillBrushConverter x:Key="StatusPillBrush" />
+                    <converters:EnumDisplayConverter x:Key="EnumDisplay" />
+                    <converters:InitialsConverter x:Key="Initials" />
+                    <converters:ProductStockStatusConverter x:Key="ProductStockStatus" />
+                </ResourceDictionary>
+                <ResourceDictionary Source="Styles/Components.xaml" />
             </ResourceDictionary.MergedDictionaries>
-
-            <converters:BoolToVisibilityConverter x:Key="BoolToVisibility" />
-            <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
-            <converters:StringToVisibilityConverter x:Key="StringToVisibility" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

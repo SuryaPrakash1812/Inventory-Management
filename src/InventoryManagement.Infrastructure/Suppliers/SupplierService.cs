@@ -160,12 +160,12 @@ public sealed class SupplierService : ISupplierService
 
         if (!string.IsNullOrWhiteSpace(query.SearchTerm))
         {
-            var term = query.SearchTerm.Trim();
+            var pattern = SearchPattern.Contains(query.SearchTerm.Trim());
             suppliers = suppliers.Where(s =>
-                s.Name.Contains(term)
-                || (s.ContactPerson != null && s.ContactPerson.Contains(term))
-                || (s.Phone != null && s.Phone.Contains(term))
-                || (s.Email != null && s.Email.Contains(term)));
+                EF.Functions.Like(s.Name, pattern, SearchPattern.Escape)
+                || (s.ContactPerson != null && EF.Functions.Like(s.ContactPerson, pattern, SearchPattern.Escape))
+                || (s.Phone != null && EF.Functions.Like(s.Phone, pattern, SearchPattern.Escape))
+                || (s.Email != null && EF.Functions.Like(s.Email, pattern, SearchPattern.Escape)));
         }
 
         if (query.IsActive is { } isActive)

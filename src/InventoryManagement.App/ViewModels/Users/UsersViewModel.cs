@@ -56,6 +56,22 @@ public sealed partial class UsersViewModel : ViewModelBase
 
     public bool IsExistingUser => EditingUserId is not null;
 
+    /// <summary>The user/role lists show unless one of the full-page edit forms is open.</summary>
+    public bool IsShowingList => !IsEditingUser && !IsEditingRole;
+
+    /// <summary>Which list tab is selected: 0 = Users, 1 = Roles.</summary>
+    [ObservableProperty]
+    private int _selectedTabIndex;
+
+    // --- Summary cards ---
+
+    [ObservableProperty] private int _activeUserCount;
+    [ObservableProperty] private int _inactiveUserCount;
+
+    partial void OnIsEditingUserChanged(bool value) => OnPropertyChanged(nameof(IsShowingList));
+
+    partial void OnIsEditingRoleChanged(bool value) => OnPropertyChanged(nameof(IsShowingList));
+
     // --- Role edit panel state ---
 
     [ObservableProperty]
@@ -107,6 +123,9 @@ public sealed partial class UsersViewModel : ViewModelBase
             {
                 Users.Add(user);
             }
+
+            ActiveUserCount = users.Count(u => u.IsActive);
+            InactiveUserCount = users.Count - ActiveUserCount;
         }
         finally
         {
@@ -151,10 +170,13 @@ public sealed partial class UsersViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void CancelUserEdit()
+    private async Task CancelUserEditAsync()
     {
         IsEditingUser = false;
         ErrorMessage = null;
+
+        // The lists are always reloaded when returning to them.
+        await LoadAllAsync();
     }
 
     [RelayCommand]
@@ -282,10 +304,13 @@ public sealed partial class UsersViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void CancelRoleEdit()
+    private async Task CancelRoleEditAsync()
     {
         IsEditingRole = false;
         ErrorMessage = null;
+
+        // The lists are always reloaded when returning to them.
+        await LoadAllAsync();
     }
 
     [RelayCommand]

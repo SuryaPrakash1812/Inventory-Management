@@ -136,6 +136,28 @@ public class PurchaseWorkflowTests
     }
 
     [Fact]
+    public void ValidateItemShape_RejectsDiscountAboveLineAmount_ButAllowsFullDiscount()
+    {
+        Assert.True(PurchaseWorkflow.ValidateItemShape(2, 5, 11, 0).IsFailure);
+        Assert.True(PurchaseWorkflow.ValidateItemShape(2, 5, 10, 0).IsSuccess);
+    }
+
+    [Theory]
+    [InlineData(PurchaseStatus.Draft, false)]
+    [InlineData(PurchaseStatus.Confirmed, true)]
+    [InlineData(PurchaseStatus.Cancelled, false)]
+    public void EnsurePaymentStatusChangeable_OnlyOnConfirmed(PurchaseStatus status, bool expected)
+    {
+        Assert.Equal(expected, PurchaseWorkflow.EnsurePaymentStatusChangeable(status).IsSuccess);
+    }
+
+    [Fact]
+    public void EnsureSufficientStockToReverse_NamesTheProduct()
+    {
+        Assert.Contains("for Cola", PurchaseWorkflow.EnsureSufficientStockToReverse(2, 5, "Cola").Error);
+    }
+
+    [Fact]
     public void EnsureSufficientStockToReverse_SucceedsWhenExactlyEnough()
     {
         var result = PurchaseWorkflow.EnsureSufficientStockToReverse(currentStock: 5, quantityToReverse: 5);

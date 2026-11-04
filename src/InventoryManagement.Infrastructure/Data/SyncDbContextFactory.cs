@@ -1,4 +1,3 @@
-using InventoryManagement.Infrastructure.Common;
 using InventoryManagement.Infrastructure.Data.Interceptors;
 using Microsoft.EntityFrameworkCore;
 
@@ -33,19 +32,22 @@ public sealed class SyncDbContextFactory : ISyncDbContextFactory
 {
     private readonly AuditableEntitySaveChangesInterceptor _auditInterceptor;
     private readonly SqliteConnectionInterceptor _connectionInterceptor;
+    private readonly LocalDatabaseOptions _database;
 
     public SyncDbContextFactory(
         AuditableEntitySaveChangesInterceptor auditInterceptor,
-        SqliteConnectionInterceptor connectionInterceptor)
+        SqliteConnectionInterceptor connectionInterceptor,
+        LocalDatabaseOptions database)
     {
         _auditInterceptor = auditInterceptor;
         _connectionInterceptor = connectionInterceptor;
+        _database = database;
     }
 
     public InventoryDbContext CreateDbContext()
     {
         var optionsBuilder = new DbContextOptionsBuilder<InventoryDbContext>();
-        optionsBuilder.UseSqlite($"Data Source={AppPaths.DatabaseFilePath}");
+        optionsBuilder.UseSqlite(_database.ConnectionString);
         optionsBuilder.AddInterceptors(_auditInterceptor, _connectionInterceptor);
 
         return new InventoryDbContext(optionsBuilder.Options);

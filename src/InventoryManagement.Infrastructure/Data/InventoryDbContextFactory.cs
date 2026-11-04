@@ -12,6 +12,12 @@ namespace InventoryManagement.Infrastructure.Data;
 /// App.xaml.cs's OnStartup, not a conventional static Program.CreateHostBuilder
 /// the tooling can find by reflection. Implementing this well-known interface
 /// sidesteps that entirely: the CLI finds this factory instead.
+///
+/// No encryption key here on purpose: `dotnet ef migrations add` only needs
+/// the model and never opens the file. Commands that DO open the database
+/// (`dotnet ef database update`) will not work against the real, encrypted
+/// inventory.db - that is expected; the app applies migrations itself on
+/// startup (DatabaseInitializer).
 /// </summary>
 public sealed class InventoryDbContextFactory : IDesignTimeDbContextFactory<InventoryDbContext>
 {

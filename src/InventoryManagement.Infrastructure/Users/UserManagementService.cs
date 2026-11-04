@@ -40,6 +40,18 @@ public sealed class UserManagementService : IUserManagementService
     public async Task<Result<UserSummary>> CreateUserAsync(
         CreateUserRequest request, CancellationToken cancellationToken = default)
     {
+        // Same rules the Users page enforces - repeated here so no caller
+        // can create an account with no username or an empty password.
+        if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.FullName))
+        {
+            return Result.Failure<UserSummary>("Username and full name are required.");
+        }
+
+        if (string.IsNullOrEmpty(request.Password) || request.Password.Length < 8)
+        {
+            return Result.Failure<UserSummary>("Password must be at least 8 characters.");
+        }
+
         var usernameTaken = await _context.Users
             .AnyAsync(u => u.Username == request.Username, cancellationToken);
 

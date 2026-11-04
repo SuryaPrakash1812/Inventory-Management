@@ -2,6 +2,9 @@ using System.Collections.ObjectModel;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
+using InventoryManagement.App.Messages;
+using InventoryManagement.App.Services;
 using InventoryManagement.Application.Categories;
 using InventoryManagement.Application.Products;
 
@@ -9,16 +12,36 @@ namespace InventoryManagement.App.ViewModels.Products;
 
 public sealed partial class ProductsViewModel : ViewModelBase
 {
+    /// <summary>The "All" entry at the top of the category filter (Id = Guid.Empty means no filter).</summary>
+    private static readonly CategorySummary AllCategories = new(Guid.Empty, "All", null, null, null, 0);
+
     private readonly IProductService _productService;
     private readonly ICategoryService _categoryService;
+    private bool _isInitialized;
 
     public ObservableCollection<ProductSummary> Products { get; } = new();
 
     public ObservableCollection<CategorySummary> Categories { get; } = new();
 
+    /// <summary><see cref="Categories"/> with "All" first - for the list filter, not the edit form.</summary>
+    public ObservableCollection<CategorySummary> CategoryFilterOptions { get; } = new();
+
+    // --- Summary cards (all active products, regardless of filters) ---
+
+    [ObservableProperty] private int _activeProductCount;
+    [ObservableProperty] private int _inStockCount;
+    [ObservableProperty] private int _lowStockCount;
+    [ObservableProperty] private int _outOfStockCount;
+    [ObservableProperty] private string _inStockPercent = "0%";
+    [ObservableProperty] private string _lowStockPercent = "0%";
+    [ObservableProperty] private string _outOfStockPercent = "0%";
+
     public IReadOnlyList<ProductSortColumn> SortColumns { get; } = Enum.GetValues<ProductSortColumn>();
 
     public IReadOnlyList<string> ActiveFilterOptions { get; } = new[] { "All", "Active only", "Inactive only" };
+
+    /// <summary>Suggestions for the editable Unit box - any other unit can still be typed.</summary>
+    public IReadOnlyList<string> UnitOptions { get; } = new[] { "pcs", "box", "kg", "g", "ltr", "ml", "m", "ft", "pack", "set", "pair", "dozen" };
 
     [ObservableProperty]
     private string _searchTerm = string.Empty;
@@ -58,7 +81,8 @@ public sealed partial class ProductsViewModel : ViewModelBase
 
     public bool CanGoToNextPage => PageNumber < TotalPages;
 
-    private const int PageSize = 25;
+    [ObservableProperty]
+    private int _pageSize = 10;
 
     // --- Edit panel state ---
 
@@ -113,27 +137,85 @@ public sealed partial class ProductsViewModel : ViewModelBase
     /// <summary>Stock is only enterable when creating a new product - see CreateProductRequest.InitialStock remarks.</summary>
     public bool IsNewProduct => EditingProductId is null;
 
-    public ProductsViewModel(IProductService productService, ICategoryService categoryService)
+    private readonly NavigationIntent _navigationIntent;
+
+    public ProductsViewModel(IProductService productService, ICategoryService categoryService, NavigationIntent navigationIntent)
     {
         _productService = productService;
         _categoryService = categoryService;
+        _navigationIntent = navigationIntent;
     }
 
     public async Task InitializeAsync()
     {
+        // Arriving from the global search: show that product.
+        if (_navigationIntent.TryTake(typeof(Views.Pages.ProductsPage), out var search, out _) && search is not null)
+        {
+            SearchTerm = search;
+        }
+
         await RefreshCategoriesAsync();
         await LoadAsync();
+        await RefreshStatsAsync();
+        _isInitialized = true;
     }
 
     private async Task RefreshCategoriesAsync()
     {
         var categories = await _categoryService.GetCategoriesAsync();
+        var selectedId = SelectedCategoryFilter?.Id ?? Guid.Empty;
 
         Categories.Clear();
+        CategoryFilterOptions.Clear();
+        CategoryFilterOptions.Add(AllCategories);
         foreach (var category in categories)
         {
             Categories.Add(category);
+            CategoryFilterOptions.Add(category);
         }
+
+        SelectedCategoryFilter = CategoryFilterOptions.FirstOrDefault(c => c.Id == selectedId) ?? AllCategories;
+    }
+
+    /// <summary>Counts for the summary cards, over every active product - the same stock rules as the Dashboard.</summary>
+    private async Task RefreshStatsAsync()
+    {
+        var all = await _productService.GetProductsAsync(new ProductQueryParameters { IsActive = true, PageSize = int.MaxValue });
+        var products = all.Items;
+
+        ActiveProductCount = products.Count;
+        OutOfStockCount = products.Count(p => p.CurrentStock <= 0);
+        LowStockCount = products.Count(p => p.CurrentStock > 0 && p.CurrentStock <= p.MinimumStock);
+        InStockCount = products.Count - OutOfStockCount - LowStockCount;
+
+        string Percent(int count) => products.Count == 0 ? "0%" : $"{100.0 * count / products.Count:0}%";
+        InStockPercent = Percent(InStockCount);
+        LowStockPercent = Percent(LowStockCount);
+        OutOfStockPercent = Percent(OutOfStockCount);
+
+        WeakReferenceMessenger.Default.Send(new StockDataChangedMessage());
+    }
+
+    // Filters apply as soon as they change (the search box applies as you type).
+    partial void OnSelectedCategoryFilterChanged(CategorySummary? value) => ReloadFromFirstPage();
+
+    partial void OnSelectedActiveFilterChanged(string value) => ReloadFromFirstPage();
+
+    partial void OnSelectedSortColumnChanged(ProductSortColumn value) => ReloadFromFirstPage();
+
+    partial void OnSortDescendingChanged(bool value) => ReloadFromFirstPage();
+
+    partial void OnPageSizeChanged(int value) => ReloadFromFirstPage();
+
+    private void ReloadFromFirstPage()
+    {
+        if (!_isInitialized)
+        {
+            return;
+        }
+
+        PageNumber = 1;
+        _ = LoadAsync();
     }
 
     [RelayCommand]
@@ -147,7 +229,7 @@ public sealed partial class ProductsViewModel : ViewModelBase
     private async Task ClearFiltersAsync()
     {
         SearchTerm = string.Empty;
-        SelectedCategoryFilter = null;
+        SelectedCategoryFilter = AllCategories;
         SelectedActiveFilter = "All";
         SelectedSortColumn = ProductSortColumn.Name;
         SortDescending = false;
@@ -178,6 +260,9 @@ public sealed partial class ProductsViewModel : ViewModelBase
 
     private int _loadRequestVersion;
 
+    private Guid? CategoryFilterId =>
+        SelectedCategoryFilter is { } category && category.Id != Guid.Empty ? category.Id : null;
+
     private async Task LoadAsync()
     {
         var requestVersion = ++_loadRequestVersion;
@@ -195,7 +280,7 @@ public sealed partial class ProductsViewModel : ViewModelBase
             var result = await _productService.GetProductsAsync(new ProductQueryParameters
             {
                 SearchTerm = string.IsNullOrWhiteSpace(SearchTerm) ? null : SearchTerm,
-                CategoryId = SelectedCategoryFilter?.Id,
+                CategoryId = CategoryFilterId,
                 IsActive = isActive,
                 SortColumn = SelectedSortColumn,
                 SortDescending = SortDescending,
@@ -289,10 +374,15 @@ public sealed partial class ProductsViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void CancelEdit()
+    private async Task CancelEditAsync()
     {
         IsEditing = false;
         ErrorMessage = null;
+
+        // The list is always reloaded when returning to it.
+        await RefreshCategoriesAsync();
+        await LoadAsync();
+        await RefreshStatsAsync();
     }
 
     [RelayCommand]
@@ -336,6 +426,7 @@ public sealed partial class ProductsViewModel : ViewModelBase
 
             IsEditing = false;
             await LoadAsync();
+            await RefreshStatsAsync();
         }
         finally
         {
@@ -356,6 +447,7 @@ public sealed partial class ProductsViewModel : ViewModelBase
         }
 
         await LoadAsync();
+        await RefreshStatsAsync();
     }
 
     /// <summary>Exports every product matching the current filters (not just the current page) to the given file path.</summary>
@@ -371,7 +463,7 @@ public sealed partial class ProductsViewModel : ViewModelBase
         var csv = await _productService.ExportToCsvAsync(new ProductQueryParameters
         {
             SearchTerm = string.IsNullOrWhiteSpace(SearchTerm) ? null : SearchTerm,
-            CategoryId = SelectedCategoryFilter?.Id,
+            CategoryId = CategoryFilterId,
             IsActive = isActive,
             PageNumber = 1,
             PageSize = int.MaxValue,
@@ -399,5 +491,6 @@ public sealed partial class ProductsViewModel : ViewModelBase
 
         await RefreshCategoriesAsync();
         await LoadAsync();
+        await RefreshStatsAsync();
     }
 }
